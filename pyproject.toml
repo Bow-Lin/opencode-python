@@ -1,0 +1,28 @@
+[project]
+name = "opencode-python"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "typer[all]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort", 
+    "flake8",
+    "pre-commit",
+]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]

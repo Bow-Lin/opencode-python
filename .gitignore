@@ -1,0 +1,6 @@
+.venv/
+.git/
+
+# Python cache files
+*.py[cod]
+**/__pycache__/
