@@ -1,6 +1,11 @@
 .venv/
 .git/
+.env
 
 # Python cache files
 *.py[cod]
 **/__pycache__/
+
+
+# local test files
+test_*

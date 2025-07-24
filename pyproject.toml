@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "typer[all]",
+    "requests",
+    "openai",
 ]
 
 [project.optional-dependencies]
@@ -14,6 +16,7 @@ dev = [
     "isort", 
     "flake8",
     "pre-commit",
+    "python-dotenv",
 ]
 
 [tool.black]
