@@ -1,4 +1,5 @@
 import typer
+
 from cli import chat
 
 app = typer.Typer()
