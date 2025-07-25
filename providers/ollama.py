@@ -68,15 +68,15 @@ class OllamaProvider(BaseProvider):
                 "Ollama is not available. Please ensure Ollama is running."
             )
 
-        # Prepare the prompt with system prompt if provided
-        full_prompt = user_query
+        # Prepare the full prompt with system prompt if provided
+        full_prompt_text = user_query
         if prompt:
-            full_prompt = f"{prompt}\n\n{user_query}"
+            full_prompt_text = f"{prompt}\n\n{user_query}"
 
         # Prepare the request payload
         payload = {
             "model": self.config["model"],
-            "prompt": full_prompt,
+            "prompt": full_prompt_text,
             "stream": False,
         }
 
