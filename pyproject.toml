@@ -17,6 +17,7 @@ dev = [
     "isort", 
     "flake8",
     "pre-commit",
+    "pytest",
 ]
 
 [tool.black]

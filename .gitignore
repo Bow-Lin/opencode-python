@@ -8,4 +8,8 @@
 
 
 # local test files
-test_*
+test/
+test_qwen.py
+
+# lock files
+uv.lock
