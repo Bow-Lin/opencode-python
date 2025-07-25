@@ -169,9 +169,16 @@ def create_default_manager() -> ProviderManager:
     Create a provider manager with default providers.
 
     Returns:
-        ProviderManager with Ollama and OpenAI providers
+        ProviderManager with Qwen, Ollama and OpenAI providers
     """
     manager = ProviderManager()
+
+    # Register Qwen provider first
+    try:
+        qwen_provider = create_qwen_provider()
+        manager.register_provider("qwen", qwen_provider)
+    except Exception:
+        pass  # Qwen not available
 
     # Register Ollama provider
     try:
@@ -186,12 +193,5 @@ def create_default_manager() -> ProviderManager:
         manager.register_provider("openai", openai_provider)
     except Exception:
         pass  # OpenAI not available
-
-    # Register Qwen provider
-    try:
-        qwen_provider = create_qwen_provider()
-        manager.register_provider("qwen", qwen_provider)
-    except Exception:
-        pass  # Qwen not available
 
     return manager
