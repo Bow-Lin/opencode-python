@@ -4,6 +4,9 @@ from typing import Any, Callable, Dict, Optional
 import typer
 
 from providers import create_default_manager
+from tool_registry.registry import get_tool_info, list_tools, search_tools
+from tools.file_tools import create_dir, list_dir, read_file, write_file
+from tools.math_tools import add, divide, multiply, subtract
 
 app = typer.Typer()
 
@@ -31,6 +34,9 @@ class CommandHandler:
             "/info": self._handle_info,
             "/system": self._handle_system,
             "/clear": self._handle_clear,
+            "/tools": self._handle_tools,
+            "/math": self._handle_math,
+            "/file": self._handle_file,
         }
 
     def handle_command(self, user_input: str) -> bool:
@@ -57,6 +63,9 @@ class CommandHandler:
         typer.echo("  /info - Show current provider info")
         typer.echo("  /system <prompt> - Set system prompt")
         typer.echo("  /clear - Clear system prompt")
+        typer.echo("  /tools - List available tools")
+        typer.echo("  /math <operation> <args> - Execute math operation")
+        typer.echo("  /file <operation> <args> - Execute file operation")
         typer.echo("  /quit, /exit, /bye - Exit chat")
         return True
 
@@ -104,6 +113,113 @@ class CommandHandler:
         """Handle clear system prompt command"""
         self.context.current_system_prompt = None
         typer.echo("System prompt cleared")
+        return True
+
+    def _handle_tools(self, command: list) -> bool:
+        """Handle tools command"""
+        all_tools = list_tools()
+        typer.echo(f"Available tools ({len(all_tools)}):")
+
+        # Group tools by category
+        math_tools = search_tools("math")
+        file_tools = search_tools("file")
+
+        typer.echo("  Math tools:")
+        for tool in math_tools:
+            info = get_tool_info(tool)
+            typer.echo(f"    {tool}: {info.description}")
+
+        typer.echo("  File tools:")
+        for tool in file_tools:
+            info = get_tool_info(tool)
+            typer.echo(f"    {tool}: {info.description}")
+
+        return True
+
+    def _handle_math(self, command: list) -> bool:
+        """Handle math operations"""
+        if len(command) < 2:
+            typer.echo("Usage: /math <operation> <args...>")
+            typer.echo("Operations: add, subtract, multiply, divide")
+            return True
+
+        operation = command[1].lower()
+        args = command[2:]
+
+        try:
+            # Convert args to numbers
+            numbers = [float(arg) for arg in args]
+
+            if operation == "add":
+                result = add(*numbers)
+            elif operation == "subtract":
+                result = subtract(*numbers)
+            elif operation == "multiply":
+                result = multiply(*numbers)
+            elif operation == "divide":
+                result = divide(*numbers)
+            else:
+                typer.echo(f"Unknown operation: {operation}")
+                return True
+
+            typer.echo(f"Result: {result}")
+
+        except ValueError:
+            typer.echo("Error: All arguments must be numbers")
+        except Exception as e:
+            typer.echo(f"Error: {e}")
+
+        return True
+
+    def _handle_file(self, command: list) -> bool:
+        """Handle file operations"""
+        if len(command) < 2:
+            typer.echo("Usage: /file <operation> <args...>")
+            typer.echo("Operations: read, write, list, create")
+            return True
+
+        operation = command[1].lower()
+        args = command[2:]
+
+        try:
+            if operation == "read":
+                if len(args) < 1:
+                    typer.echo("Usage: /file read <file_path>")
+                    return True
+                content = read_file(args[0])
+                typer.echo(f"File content:\n{content}")
+
+            elif operation == "write":
+                if len(args) < 2:
+                    typer.echo("Usage: /file write <file_path> <content>")
+                    return True
+                file_path = args[0]
+                content = " ".join(args[1:])
+                result = write_file(file_path, content)
+                if result:
+                    typer.echo(f"Successfully wrote to {file_path}")
+
+            elif operation == "list":
+                dir_path = args[0] if args else "."
+                items = list_dir(dir_path)
+                typer.echo(f"Directory contents of {dir_path}:")
+                for item in items:
+                    typer.echo(f"  {item}")
+
+            elif operation == "create":
+                if len(args) < 1:
+                    typer.echo("Usage: /file create <dir_path>")
+                    return True
+                result = create_dir(args[0])
+                if result:
+                    typer.echo(f"Successfully created directory: {args[0]}")
+
+            else:
+                typer.echo(f"Unknown operation: {operation}")
+
+        except Exception as e:
+            typer.echo(f"Error: {e}")
+
         return True
 
 
@@ -157,6 +273,9 @@ def start(
     typer.echo("  /info - Show current provider info")
     typer.echo("  /system <prompt> - Set system prompt")
     typer.echo("  /clear - Clear system prompt")
+    typer.echo("  /tools - List available tools")
+    typer.echo("  /math <operation> <args> - Execute math operation")
+    typer.echo("  /file <operation> <args> - Execute file operation")
     typer.echo("  /quit, /exit, /bye - Exit chat")
     typer.echo()
 

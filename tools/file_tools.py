@@ -73,7 +73,9 @@ def write_file(file_path: str, content: str, encoding: str = "utf-8") -> bool:
     """
     try:
         # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        dir_path = os.path.dirname(file_path)
+        if dir_path:  # Only create directory if there's a directory path
+            os.makedirs(dir_path, exist_ok=True)
 
         with open(file_path, "w", encoding=encoding) as f:
             f.write(content)
