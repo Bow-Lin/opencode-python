@@ -8,6 +8,7 @@ dependencies = [
     "typer[all]",
     "requests",
     "openai",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
@@ -16,7 +17,6 @@ dev = [
     "isort", 
     "flake8",
     "pre-commit",
-    "python-dotenv",
 ]
 
 [tool.black]

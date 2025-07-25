@@ -16,6 +16,9 @@ class ToolInfo:
     version: str = "1.0.0"
     author: Optional[str] = None
     created_at: Optional[str] = None
+    parameters: Optional[List[str]] = None
+    signature: Optional[str] = None
+    return_annotation: Optional[str] = None
 
     def __post_init__(self):
         """Set default description from function docstring if not provided"""
@@ -39,6 +42,9 @@ class ToolRegistry:
         version: str = "1.0.0",
         author: Optional[str] = None,
         created_at: Optional[str] = None,
+        parameters: Optional[List[str]] = None,
+        signature: Optional[str] = None,
+        return_annotation: Optional[str] = None,
     ) -> Callable:
         """
         Register a function as a tool with metadata
@@ -67,6 +73,9 @@ class ToolRegistry:
                 version=version,
                 author=author,
                 created_at=created_at,
+                parameters=parameters,
+                signature=signature,
+                return_annotation=return_annotation,
             )
 
             self._tools[tool_name] = tool_info
@@ -161,6 +170,9 @@ def register_tool(
     version: str = "1.0.0",
     author: Optional[str] = None,
     created_at: Optional[str] = None,
+    parameters: Optional[List[str]] = None,
+    signature: Optional[str] = None,
+    return_annotation: Optional[str] = None,
 ) -> Callable:
     """
     Decorator to register a function as a tool with metadata
@@ -185,6 +197,9 @@ def register_tool(
         version=version,
         author=author,
         created_at=created_at,
+        parameters=parameters,
+        signature=signature,
+        return_annotation=return_annotation,
     )
 
 
