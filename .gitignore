@@ -13,3 +13,6 @@ test_qwen.py
 
 # lock files
 uv.lock
+
+# examples
+examples/

@@ -19,6 +19,7 @@ dev = [
     "flake8",
     "pre-commit",
     "pytest",
+    "pytest-asyncio",
 ]
 
 [tool.black]
