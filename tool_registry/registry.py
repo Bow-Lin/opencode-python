@@ -87,6 +87,7 @@ class ToolRegistry:
         else:
             return decorator(func)
 
+    # TODO: add cache to optimize the performance
     def get_tool(self, name: str) -> Optional[Callable]:
         """
         Get a tool function by name (backward compatibility)
