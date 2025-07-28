@@ -300,16 +300,34 @@ class QwenPlanner(BasePlanner):
         Returns:
             PlanResult with model-decided tools and parameters
         """
-        # Similar to OpenAIPlanner but with Qwen-specific adaptations
-        # This is a placeholder implementation
         query = input_data.query
         tools = input_data.tools if input_data.tools else []
+        parameters = input_data.parameters or {}
+
+        # If tools are explicitly specified, use them directly
+        if tools and parameters:
+            tool_calls = []
+            for tool_name in tools:
+                if tool_name in parameters:
+                    tool_calls.append(
+                        {"tool": tool_name, "args": parameters[tool_name]}
+                    )
+
+            tool_names = [call["tool"] for call in tool_calls]
+            plan = f"Qwen planner using specified tools: {tool_names}"
+
+            return PlanResult(
+                plan=plan,
+                tools_to_use=[call["tool"] for call in tool_calls],
+                parameters={call["tool"]: call["args"] for call in tool_calls},
+                metadata={"planner_type": "QwenPlanner", "tool_calls": tool_calls},
+            )
 
         # Filter tools if specified
         if tools:
             available_tools = [tool for tool in available_tools if tool.name in tools]
 
-        # For now, use simple keyword matching as fallback
+        # Use keyword matching to find tools
         tool_calls = self._simple_keyword_matching(query, available_tools)
 
         tool_names = [call["tool"] for call in tool_calls]
@@ -361,9 +379,69 @@ class QwenPlanner(BasePlanner):
 
             # Only add if the score is reasonable (at least 3 characters matched)
             if best_score >= 3:
-                tool_calls.append({"tool": best_tool.name, "args": {}})
+                # Try to extract parameters from query
+                args = self._extract_parameters_from_query(query, best_tool)
+                tool_calls.append({"tool": best_tool.name, "args": args})
 
         return tool_calls
+
+    def _extract_parameters_from_query(self, query: str, tool: Any) -> Dict[str, Any]:
+        """
+        Extract parameters from query based on tool signature
+
+        Args:
+            query: User query
+            tool: Tool object with signature information
+
+        Returns:
+            Dictionary of extracted parameters
+        """
+        import inspect
+        import re
+
+        args = {}
+
+        try:
+            # Get tool function signature
+            if hasattr(tool, "func"):
+                func = tool.func
+            else:
+                func = tool
+
+            sig = inspect.signature(func)
+
+            # Extract numbers from query for numeric parameters
+            numbers = re.findall(r"\d+", query)
+            number_index = 0
+
+            for param_name, param in sig.parameters.items():
+                if param_name == "self":
+                    continue
+
+                param_type = param.annotation
+
+                # Try to extract based on parameter type
+                if param_type == int or param_type == float:
+                    if number_index < len(numbers):
+                        try:
+                            if param_type == int:
+                                args[param_name] = int(numbers[number_index])
+                            else:
+                                args[param_name] = float(numbers[number_index])
+                            number_index += 1
+                        except ValueError:
+                            pass
+
+                elif param_type == str:
+                    # For string parameters, look for quoted text or specific patterns
+                    # This is a simple implementation - could be enhanced
+                    pass
+
+        except Exception:
+            # If parameter extraction fails, return empty dict
+            pass
+
+        return args
 
 
 class RuleBasedPlanner(BasePlanner):

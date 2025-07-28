@@ -10,6 +10,7 @@
 # local test files
 test/
 test_qwen.py
+test*
 
 # lock files
 uv.lock

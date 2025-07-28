@@ -1,10 +1,15 @@
+#!/usr/bin/env python3
+"""
+Enhanced CLI with SimpleToolAgent integration
+"""
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 import typer
 
+from agents import AgentInput, SimpleToolAgent
 from providers import create_default_manager
-from tool_registry.registry import get_tool_info, list_tools, search_tools
+from tool_registry.registry import list_tools_with_info
 from tools.file_tools import create_dir, list_dir, read_file, write_file
 from tools.math_tools import add, divide, multiply, subtract
 
@@ -12,18 +17,19 @@ app = typer.Typer()
 
 
 @dataclass
-class ChatContext:
-    """Context for chat commands"""
+class AgentChatContext:
+    """Context for agent chat commands"""
 
     manager: Any
+    agent: SimpleToolAgent
     available_providers: list
     current_system_prompt: Optional[str] = None
 
 
-class CommandHandler:
-    """Command handler using Command pattern"""
+class AgentCommandHandler:
+    """Enhanced command handler with agent integration"""
 
-    def __init__(self, context: ChatContext):
+    def __init__(self, context: AgentChatContext):
         self.context = context
         self.commands: Dict[str, Callable] = {
             "/quit": self._handle_quit,
@@ -35,6 +41,7 @@ class CommandHandler:
             "/system": self._handle_system,
             "/clear": self._handle_clear,
             "/tools": self._handle_tools,
+            "/agent": self._handle_agent,
             "/math": self._handle_math,
             "/file": self._handle_file,
         }
@@ -64,6 +71,7 @@ class CommandHandler:
         typer.echo("  /system <prompt> - Set system prompt")
         typer.echo("  /clear - Clear system prompt")
         typer.echo("  /tools - List available tools")
+        typer.echo("  /agent <query> - Use agent to handle query with tools")
         typer.echo("  /math <operation> <args> - Execute math operation")
         typer.echo("  /file <operation> <args> - Execute file operation")
         typer.echo("  /quit, /exit, /bye - Exit chat")
@@ -93,8 +101,6 @@ class CommandHandler:
         provider_info = current_provider.get_model_info()
         typer.echo(f"Current provider: {self.context.manager.default_provider}")
         typer.echo(f"Model: {provider_info.get('model', 'Unknown')}")
-        if "base_url" in provider_info:
-            typer.echo(f"Base URL: {provider_info['base_url']}")
         if self.context.current_system_prompt:
             typer.echo(f"System prompt: {self.context.current_system_prompt}")
         return True
@@ -105,135 +111,139 @@ class CommandHandler:
             typer.echo("Usage: /system <prompt>")
             return True
 
-        self.context.current_system_prompt = " ".join(command[1:])
-        typer.echo(f"System prompt set: {self.context.current_system_prompt}")
+        prompt = " ".join(command[1:])
+        self.context.current_system_prompt = prompt
+        typer.echo(f"System prompt set: {prompt}")
         return True
 
     def _handle_clear(self, command: list) -> bool:
         """Handle clear system prompt command"""
         self.context.current_system_prompt = None
-        typer.echo("System prompt cleared")
+        typer.echo("System prompt cleared.")
         return True
 
     def _handle_tools(self, command: list) -> bool:
         """Handle tools command"""
-        all_tools = list_tools()
-        typer.echo(f"Available tools ({len(all_tools)}):")
+        tools_info = list_tools_with_info()
+        typer.echo("Available tools:")
+        for tool_info in tools_info:
+            desc = tool_info.description or "No description"
+            typer.echo(f"  {tool_info.name}: {desc}")
+        return True
 
-        # Group tools by category
-        math_tools = search_tools("math")
-        file_tools = search_tools("file")
+    def _handle_agent(self, command: list) -> bool:
+        """Handle agent command"""
+        if len(command) <= 1:
+            typer.echo("Usage: /agent <query>")
+            return True
 
-        typer.echo("  Math tools:")
-        for tool in math_tools:
-            info = get_tool_info(tool)
-            typer.echo(f"    {tool}: {info.description}")
+        query = " ".join(command[1:])
+        try:
+            typer.echo("Agent processing...")
 
-        typer.echo("  File tools:")
-        for tool in file_tools:
-            info = get_tool_info(tool)
-            typer.echo(f"    {tool}: {info.description}")
+            # Create agent input
+            input_data = AgentInput(query=query)
 
+            # Use agent to plan and execute
+            plan_result = self.context.agent.plan(input_data)
+            output = self.context.agent.run(plan_result)
+
+            # Display results
+            typer.echo(f"Agent: {output.result}")
+
+        except Exception as e:
+            typer.echo(f"Agent error: {e}")
+            # Fallback to regular provider
+            try:
+                response = self.context.manager.generate(
+                    user_query=query, prompt=self.context.current_system_prompt
+                )
+                typer.echo(f"Assistant (fallback): {response}")
+            except Exception as fallback_error:
+                typer.echo(f"Error generating response: {fallback_error}")
         return True
 
     def _handle_math(self, command: list) -> bool:
-        """Handle math operations"""
-        if len(command) < 2:
-            typer.echo("Usage: /math <operation> <args...>")
+        """Handle math command"""
+        if len(command) < 3:
+            typer.echo("Usage: /math <operation> <arg1> [arg2]")
             typer.echo("Operations: add, subtract, multiply, divide")
             return True
 
         operation = command[1].lower()
-        args = command[2:]
-
         try:
-            # Convert args to numbers
-            numbers = [float(arg) for arg in args]
+            arg1 = float(command[2])
+            arg2 = float(command[3]) if len(command) > 3 else 0
 
             if operation == "add":
-                result = add(*numbers)
+                result = add(arg1, arg2)
             elif operation == "subtract":
-                result = subtract(*numbers)
+                result = subtract(arg1, arg2)
             elif operation == "multiply":
-                result = multiply(*numbers)
+                result = multiply(arg1, arg2)
             elif operation == "divide":
-                result = divide(*numbers)
+                if arg2 == 0:
+                    typer.echo("Error: Division by zero")
+                    return True
+                result = divide(arg1, arg2)
             else:
                 typer.echo(f"Unknown operation: {operation}")
                 return True
 
             typer.echo(f"Result: {result}")
-
         except ValueError:
-            typer.echo("Error: All arguments must be numbers")
+            typer.echo("Error: Invalid number format")
         except Exception as e:
             typer.echo(f"Error: {e}")
-
         return True
 
     def _handle_file(self, command: list) -> bool:
-        """Handle file operations"""
-        if len(command) < 2:
-            typer.echo("Usage: /file <operation> <args...>")
+        """Handle file command"""
+        if len(command) < 3:
+            typer.echo("Usage: /file <operation> <path> [content]")
             typer.echo("Operations: read, write, list, create")
             return True
 
         operation = command[1].lower()
-        args = command[2:]
+        path = command[2]
 
         try:
             if operation == "read":
-                if len(args) < 1:
-                    typer.echo("Usage: /file read <file_path>")
-                    return True
-                content = read_file(args[0])
+                content = read_file(path)
                 typer.echo(f"File content:\n{content}")
-
             elif operation == "write":
-                if len(args) < 2:
-                    typer.echo("Usage: /file write <file_path> <content>")
+                if len(command) < 4:
+                    typer.echo("Usage: /file write <path> <content>")
                     return True
-                file_path = args[0]
-                content = " ".join(args[1:])
-                result = write_file(file_path, content)
-                if result:
-                    typer.echo(f"Successfully wrote to {file_path}")
-
+                content = " ".join(command[3:])
+                write_file(path, content)
+                typer.echo(f"File written: {path}")
             elif operation == "list":
-                dir_path = args[0] if args else "."
-                items = list_dir(dir_path)
-                typer.echo(f"Directory contents of {dir_path}:")
-                for item in items:
-                    typer.echo(f"  {item}")
-
+                items = list_dir(path)
+                typer.echo(f"Directory contents:\n{items}")
             elif operation == "create":
-                if len(args) < 1:
-                    typer.echo("Usage: /file create <dir_path>")
-                    return True
-                result = create_dir(args[0])
-                if result:
-                    typer.echo(f"Successfully created directory: {args[0]}")
-
+                create_dir(path)
+                typer.echo(f"Directory created: {path}")
             else:
                 typer.echo(f"Unknown operation: {operation}")
-
         except Exception as e:
             typer.echo(f"Error: {e}")
-
         return True
 
 
-@app.command()
-def start(
+def start_chat(
     provider: str = typer.Option(
         None, "--provider", "-p", help="Specify provider to use"
     ),
     system_prompt: str = typer.Option(
         None, "--system-prompt", "-s", help="Set system prompt"
     ),
+    agent_mode: bool = typer.Option(
+        True, "--agent", "-a", help="Enable agent mode for tool usage"
+    ),
 ):
-    """Start the chat interface."""
-    typer.echo("Welcome to OpenCode (Python version)!")
+    """Start the enhanced chat interface with agent support."""
+    typer.echo("Welcome to OpenCode Agent (Python version)!")
 
     # Initialize provider manager
     manager = create_default_manager()
@@ -267,6 +277,10 @@ def start(
     if system_prompt:
         typer.echo(f"System prompt: {system_prompt}")
 
+    # Initialize agent
+    agent = SimpleToolAgent()
+    typer.echo(f"Agent initialized: {type(agent).__name__}")
+
     typer.echo("\nCommands:")
     typer.echo("  /help - Show this help")
     typer.echo("  /switch <provider> - Switch to another provider")
@@ -274,18 +288,23 @@ def start(
     typer.echo("  /system <prompt> - Set system prompt")
     typer.echo("  /clear - Clear system prompt")
     typer.echo("  /tools - List available tools")
+    typer.echo("  /agent <query> - Use agent to handle query with tools")
     typer.echo("  /math <operation> <args> - Execute math operation")
     typer.echo("  /file <operation> <args> - Execute file operation")
     typer.echo("  /quit, /exit, /bye - Exit chat")
     typer.echo()
+    typer.echo("Agent mode: Type natural language queries and the agent will")
+    typer.echo("automatically determine which tools to use!")
+    typer.echo()
 
     # Initialize chat context and command handler
-    context = ChatContext(
+    context = AgentChatContext(
         manager=manager,
+        agent=agent,
         available_providers=available_providers,
         current_system_prompt=system_prompt,
     )
-    command_handler = CommandHandler(context)
+    command_handler = AgentCommandHandler(context)
 
     # Chat loop
     while True:
@@ -299,14 +318,40 @@ def start(
                     break
                 continue
 
-            # Generate response using provider
-            try:
-                response = manager.generate(
-                    user_query=user_input, prompt=context.current_system_prompt
-                )
-                typer.echo(f"Assistant: {response}")
-            except Exception as e:
-                typer.echo(f"Error generating response: {e}")
+            # Agent mode: Use agent to handle natural language queries
+            if agent_mode:
+                try:
+                    typer.echo("Agent processing...")
+
+                    # Create agent input
+                    input_data = AgentInput(query=user_input)
+
+                    # Use agent to plan and execute
+                    plan_result = agent.plan(input_data)
+                    output = agent.run(plan_result)
+
+                    # Display results
+                    typer.echo(f"Assistant: {output.result}")
+
+                except Exception as e:
+                    typer.echo(f"Agent error: {e}")
+                    # Fallback to regular provider
+                    try:
+                        response = manager.generate(
+                            user_query=user_input, prompt=context.current_system_prompt
+                        )
+                        typer.echo(f"Assistant (fallback): {response}")
+                    except Exception as fallback_error:
+                        typer.echo(f"Error generating response: {fallback_error}")
+            else:
+                # Regular mode: Use provider directly
+                try:
+                    response = manager.generate(
+                        user_query=user_input, prompt=context.current_system_prompt
+                    )
+                    typer.echo(f"Assistant: {response}")
+                except Exception as e:
+                    typer.echo(f"Error generating response: {e}")
 
         except KeyboardInterrupt:
             typer.echo("\nGoodbye!")
@@ -316,75 +361,36 @@ def start(
 
 
 @app.command()
-def providers():
-    """List available model providers."""
-    manager = create_default_manager()
-
-    typer.echo("Registered providers:")
-    for provider_name in manager.list_providers():
-        provider = manager.get_provider(provider_name)
-        status = "✓ Available" if provider.is_available() else "✗ Not available"
-        typer.echo(f"  {provider_name}: {status}")
-
-        if provider.is_available():
-            info = provider.get_model_info()
-            typer.echo(f"    Model: {info.get('model', 'Unknown')}")
-            if "base_url" in info:
-                typer.echo(f"    Base URL: {info['base_url']}")
-
-
-@app.command()
-def test(
-    user_query: str = typer.Option("Hello, how are you?", "--user-query", "-q"),
-    provider: str = typer.Option(None, "--provider", "-P"),
-    system_prompt: str = typer.Option(None, "--system-prompt", "-s"),
-):
-    """Test a model provider with a user query."""
-    manager = create_default_manager()
-
-    try:
-        # Get provider info for display
-        if provider:
-            current_provider = manager.get_provider(provider)
-            provider_info = current_provider.get_model_info()
-            typer.echo(f"Testing provider: {provider}")
-            typer.echo(f"Model: {provider_info.get('model', 'Unknown')}")
-        else:
-            typer.echo(f"Testing default provider: {manager.default_provider}")
-
-        if system_prompt:
-            typer.echo(f"System prompt: {system_prompt}")
-
-        typer.echo(f"User query: {user_query}")
-        typer.echo("---")
-
-        response = manager.generate(
-            user_query=user_query, prompt=system_prompt, provider_name=provider
-        )
-        typer.echo(response)
-    except Exception as e:
-        typer.echo(f"Error: {e}")
-
-
-@app.command()
-def generate(
-    user_query: str = typer.Argument(..., help="Input user query"),
-    provider: str = typer.Option(None, "--provider", "-P", help="Specify provider"),
+def start(
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="Specify provider to use"
+    ),
     system_prompt: str = typer.Option(
-        None, "--system-prompt", "-s", help="System prompt"
+        None, "--system-prompt", "-s", help="Set system prompt"
+    ),
+    agent_mode: bool = typer.Option(
+        True, "--agent", "-a", help="Enable agent mode for tool usage"
     ),
 ):
-    """Generate a single response using the specified provider."""
-    manager = create_default_manager()
+    """Start the enhanced chat interface with agent support."""
+    start_chat(provider=provider, system_prompt=system_prompt, agent_mode=agent_mode)
 
-    try:
-        response = manager.generate(
-            user_query=user_query, prompt=system_prompt, provider_name=provider
-        )
-        typer.echo(response)
-    except Exception as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+
+# Default command when no subcommand is provided
+@app.callback()
+def main(
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="Specify provider to use"
+    ),
+    system_prompt: str = typer.Option(
+        None, "--system-prompt", "-s", help="Set system prompt"
+    ),
+    agent_mode: bool = typer.Option(
+        True, "--agent", "-a", help="Enable agent mode for tool usage"
+    ),
+):
+    """Enhanced CLI with SimpleToolAgent integration"""
+    start_chat(provider=provider, system_prompt=system_prompt, agent_mode=agent_mode)
 
 
 if __name__ == "__main__":

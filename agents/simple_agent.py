@@ -1,22 +1,40 @@
 """
-Simple Tool Agent implementation
+Simple Tool Agent implementation with ToolPlanner and ToolRunner
 """
-from typing import List
+from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock
 
-from tool_registry.registry import get_tool_func, list_tools
+from tool_registry.registry import list_tools_with_info
 
 from .base import AgentInput, AgentOutput, BaseAgent, PlanResult
+from .planner import BasePlanner, OpenAIPlanner, QwenPlanner
+from .runner import ToolExecutor, run_multiple_tools
 
 
 class SimpleToolAgent(BaseAgent):
-    """Simple agent that can directly call registered tools"""
+    """Simple agent that uses ToolPlanner and ToolRunner for tool execution"""
 
-    def __init__(self, name: str = "SimpleToolAgent"):
+    def __init__(
+        self,
+        planner: Optional[BasePlanner] = None,
+        executor: Optional[ToolExecutor] = None,
+        name: str = "SimpleToolAgent",
+    ):
         super().__init__(name)
+
+        # Initialize planner (default to QwenPlanner with mock provider)
+        if planner is None:
+            mock_provider = MagicMock()
+            self.planner = QwenPlanner(mock_provider)
+        else:
+            self.planner = planner
+
+        # Initialize executor
+        self.executor = executor or ToolExecutor()
 
     def plan(self, input_data: AgentInput) -> PlanResult:
         """
-        Simple planning that identifies tools to use based on input
+        Use ToolPlanner to determine if tools are needed and which ones to use
 
         Args:
             input_data: Agent input containing query and context
@@ -24,118 +42,135 @@ class SimpleToolAgent(BaseAgent):
         Returns:
             PlanResult with execution plan
         """
-        query = input_data.query
-        tools = input_data.tools or []
-        parameters = input_data.parameters or {}
+        # Get available tools
+        available_tools = list_tools_with_info()
 
-        # Simple tool selection logic
-        tools_to_use = []
-        if tools:
-            # Use specified tools if provided
-            tools_to_use = tools
-        else:
-            # Try to infer tools from query (basic implementation)
-            available_tools = self._get_available_tools()
-            tools_to_use = self._select_tools_by_query(query, available_tools)
+        # Use planner to determine tool usage
+        plan_result = self.planner.plan(input_data, available_tools)
 
-        plan = f"Execute tools: {', '.join(tools_to_use)} with query: {query}"
-
-        return PlanResult(
-            plan=plan,
-            tools_to_use=tools_to_use,
-            parameters=parameters,
-            metadata={"agent_type": "SimpleToolAgent"},
-        )
+        return plan_result
 
     def run(self, plan_result: PlanResult) -> AgentOutput:
         """
-        Execute the plan by calling the specified tools
+        Execute the plan using ToolRunner and generate final response
 
         Args:
             plan_result: Result from the planning phase
 
         Returns:
-            AgentOutput with execution results
+            AgentOutput with execution results and final response
         """
         tools_to_use = plan_result.tools_to_use
         parameters = plan_result.parameters
         results = []
         tools_used = []
 
-        for tool_name in tools_to_use:
-            tool_func = get_tool_func(tool_name)
-            if tool_func:
-                try:
-                    # Execute tool with parameters
-                    if parameters and tool_name in parameters:
-                        tool_params = parameters[tool_name]
-                        if isinstance(tool_params, dict):
-                            result = tool_func(**tool_params)
-                        else:
-                            result = tool_func(tool_params)
-                    else:
-                        result = tool_func()
+        # Execute tools if any are needed
+        if tools_to_use:
+            # Convert plan result to tool calls format
+            tool_calls = [
+                {"tool": tool_name, "args": args}
+                for tool_name, args in parameters.items()
+            ]
 
-                    results.append({"tool": tool_name, "result": result})
+            # Execute tools using ToolRunner
+            execution_results = run_multiple_tools(tool_calls)
+
+            # Process execution results
+            for i, exec_result in enumerate(execution_results):
+                tool_name = tools_to_use[i] if i < len(tools_to_use) else "unknown"
+
+                if exec_result.success:
+                    results.append(
+                        {
+                            "tool": tool_name,
+                            "result": exec_result.result,
+                            "execution_time": exec_result.execution_time,
+                        }
+                    )
                     tools_used.append(tool_name)
-                except Exception as e:
-                    results.append({"tool": tool_name, "error": str(e)})
-            else:
-                results.append({"tool": tool_name, "error": "Tool not found"})
+                else:
+                    results.append(
+                        {
+                            "tool": tool_name,
+                            "error": exec_result.error,
+                            "execution_time": exec_result.execution_time,
+                        }
+                    )
+
+        # Generate final response based on tool results
+        final_response = self._generate_final_response(
+            plan_result.plan, results, tools_used
+        )
 
         return AgentOutput(
-            result=results,
+            result=final_response,
             plan=plan_result.plan,
             tools_used=tools_used,
             metadata={
                 "agent_type": "SimpleToolAgent",
                 "total_tools": len(tools_to_use),
                 "successful_tools": len(tools_used),
+                "execution_results": results,
+                "planner_type": type(self.planner).__name__,
             },
         )
 
-    def _get_available_tools(self) -> List[str]:
-        """Get list of available tool names"""
-        return list_tools()
-
-    def _select_tools_by_query(
-        self, query: str, available_tools: List[str]
-    ) -> List[str]:
+    def _generate_final_response(
+        self, plan: str, tool_results: List[Dict[str, Any]], tools_used: List[str]
+    ) -> str:
         """
-        Simple tool selection based on query keywords
+        Generate final response based on tool execution results
 
         Args:
-            query: User query
-            available_tools: List of available tool names
+            plan: Original execution plan
+            tool_results: Results from tool executions
+            tools_used: List of successfully used tools
 
         Returns:
-            List of selected tool names
+            Final response string
         """
-        query_lower = query.lower()
-        selected_tools = []
+        if not tool_results:
+            return "No tools were executed."
 
-        # Simple keyword-based tool selection
-        for tool_name in available_tools:
-            tool_name_lower = tool_name.lower()
+        response_parts = []
+        response_parts.append(f"Plan: {plan}")
+        response_parts.append(f"Executed {len(tools_used)} tools successfully.")
 
-            # Check if tool name appears in query
-            if tool_name_lower in query_lower:
-                selected_tools.append(tool_name)
-                continue
+        for result in tool_results:
+            tool_name = result["tool"]
+            if "error" in result:
+                response_parts.append(f"Tool '{tool_name}' failed: {result['error']}")
+            else:
+                response_parts.append(
+                    f"Tool '{tool_name}' returned: {result['result']}"
+                )
 
-            # Check for common patterns
-            file_keywords = ["file", "read", "write"]
-            math_keywords = ["math", "calculate", "compute"]
+        return "\n".join(response_parts)
 
-            if (
-                any(keyword in query_lower for keyword in file_keywords)
-                and "file" in tool_name_lower
-            ):
-                selected_tools.append(tool_name)
-            elif (
-                any(keyword in query_lower for keyword in math_keywords)
-                and "math" in tool_name_lower
-            ):
-                selected_tools.append(tool_name)
+    def run_with_provider(self, input_data: AgentInput, provider) -> AgentOutput:
+        """
+        Run agent with a specific provider for enhanced planning
 
-        return selected_tools[:3]  # Limit to 3 tools max
+        Args:
+            input_data: Agent input
+            provider: LLM provider for planning
+
+        Returns:
+            AgentOutput with results
+        """
+        # Create planner with the provided provider
+        if isinstance(self.planner, OpenAIPlanner):
+            planner = OpenAIPlanner(provider)
+        elif isinstance(self.planner, QwenPlanner):
+            planner = QwenPlanner(provider)
+        else:
+            # Use current planner if not OpenAI/Qwen type
+            planner = self.planner
+
+        # Create temporary agent with new planner
+        temp_agent = SimpleToolAgent(planner=planner, executor=self.executor)
+
+        # Plan and execute
+        plan_result = temp_agent.plan(input_data)
+        return temp_agent.run(plan_result)
