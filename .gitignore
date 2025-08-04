@@ -17,3 +17,6 @@ uv.lock
 
 # examples
 examples/
+
+# build
+*.egg-info/
