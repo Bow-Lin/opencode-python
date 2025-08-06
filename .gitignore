@@ -8,11 +8,7 @@
 
 
 # local test files
-test_qwen.py
-# Exclude test files but allow test/ directory
-test*.py
-test*.txt
-test*.md
+local_test/
 
 # lock files
 uv.lock
@@ -22,3 +18,5 @@ examples/
 
 # build
 *.egg-info/
+
+.cursor/
