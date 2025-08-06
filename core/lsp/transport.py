@@ -27,7 +27,6 @@ class Transport:
             import platform
 
             use_shell = platform.system() == "Windows"
-            print(f"use_shell: {use_shell}")
             self.process = subprocess.Popen(
                 self.server_command,
                 stdin=subprocess.PIPE,
@@ -41,14 +40,8 @@ class Transport:
             # Check if process started successfully
             if self.process.poll() is not None:
                 # Process has already terminated
-                stderr_output = self.process.stderr.read()
-                print(
-                    f"❌ Process failed to start. Exit code: {self.process.returncode}"
-                )
-                print(f"❌ stderr: {stderr_output}")
                 return False
 
-            print(f"✅ Process started with PID: {self.process.pid}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to start language server: {e}")
@@ -82,7 +75,6 @@ class Transport:
         try:
             message = json.dumps(request)
             content = f"Content-Length: {len(message.encode('utf-8'))}\r\n\r\n{message}"
-            print(f"📤 Sending request: {method} (id: {self.request_id})")
             self.process.stdin.write(content.encode("utf-8"))
             self.process.stdin.flush()
 
@@ -94,21 +86,10 @@ class Transport:
 
                 # 检查是否是我们要的响应
                 if "id" in msg and msg["id"] == self.request_id:
-                    print(f"📨 Got response for request {self.request_id}")
                     return msg
-                else:
-                    # 这是通知或其他响应，打印出来但继续等待
-                    if "id" in msg:
-                        print(f"📨 Got response for different request: {msg}")
-                    else:
-                        print(f"🔔 Got notification: {msg.get('method', 'unknown')}")
-                        print(f"   Content: {json.dumps(msg, indent=2)}")
 
         except Exception as e:
-            print(f"Error sending request: {e}")
-            import traceback
-
-            traceback.print_exc()
+            self.logger.error(f"Error sending request: {e}")
             return None
 
     def send_notification(self, method: str, params: Optional[Dict[str, Any]] = None):
@@ -135,7 +116,6 @@ class Transport:
             while b"\r\n\r\n" not in buffer:
                 # 检查超时
                 if time.time() - start_time > timeout:
-                    print(f"⏰ Timeout waiting for message header")
                     return None
 
                 # 一次读取更多数据，但要处理可能的阻塞
@@ -144,17 +124,12 @@ class Transport:
                     if sys.platform != "win32":
                         ready, _, _ = select.select([self.process.stdout], [], [], 0.1)
                         if not ready:
-                            print("⏳ No data available, waiting...")
                             continue
-                    print("📖 Attempting to read 4096 bytes...")
                     chunk = self.process.stdout.read(4096)
-                    print(f"📦 Received {len(chunk)} bytes: {chunk[:100]}...")
                     if not chunk:
-                        print("⚠️ Connection closed while reading header")
                         return None
                     buffer += chunk
                 except Exception as e:
-                    print(f"❌ Error reading chunk: {e}")
                     return None
 
             # 2. 分离头部和可能的消息体数据
@@ -163,7 +138,6 @@ class Transport:
             remaining_bytes = buffer[header_end + 4 :]  # +4 for \r\n\r\n
 
             header_text = header_bytes.decode("utf-8")
-            print(f"📥 Raw headers:\n{header_text}")
 
             # 3. 解析头部
             headers = {}
@@ -174,10 +148,7 @@ class Transport:
 
             content_length = int(headers.get("content-length", "0"))
             if content_length == 0:
-                print("⚠️ Content-Length is 0 or missing")
                 return None
-
-            print(f"📦 Expecting {content_length} bytes")
 
             # 4. 读取消息体
             content_bytes = remaining_bytes
@@ -186,28 +157,19 @@ class Transport:
             while len(content_bytes) < content_length:
                 # 检查超时
                 if time.time() - start_time > timeout:
-                    print(f"⏰ Timeout waiting for message content")
                     return None
 
                 needed = content_length - len(content_bytes)
                 chunk = self.process.stdout.read(needed)
                 if not chunk:
-                    print("⚠️ Connection closed while reading content")
                     return None
                 content_bytes += chunk
 
             # 5. 只取需要的字节数（可能有多余的）
             message_bytes = content_bytes[:content_length]
 
-            print(
-                f"📦 Raw content ({len(message_bytes)} bytes):\n{message_bytes.decode('utf-8')}\n---"
-            )
-
             return json.loads(message_bytes.decode("utf-8"))
 
         except Exception as e:
-            print(f"[LSP] Failed to read message: {e}")
-            import traceback
-
-            traceback.print_exc()
+            self.logger.error(f"Failed to read message: {e}")
             return None
