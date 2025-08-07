@@ -1,6 +1,7 @@
 import os
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from tools import BaseTool, ToolInfo, ToolExecutionResponse
 
 
@@ -22,6 +23,7 @@ GLOB PATTERN SYNTAX:
 - '?' matches any single non-separator character
 - '[...]' matches any character in the brackets
 - '[!...]' matches any character not in the brackets
+- '{pattern1,pattern2}' expands to multiple patterns (brace expansion)
 
 COMMON PATTERN EXAMPLES:
 - '*.js' - Find all JavaScript files in the current directory
@@ -58,6 +60,56 @@ class GlobTool(BaseTool):
             },
         )
 
+    def _expand_braces(self, pattern: str) -> List[str]:
+        """Expand brace patterns like {a,b,c} into multiple patterns"""
+        if '{' not in pattern or '}' not in pattern:
+            return [pattern]
+        
+        # Find the outermost brace pair
+        brace_start = pattern.find('{')
+        brace_end = pattern.find('}')
+        
+        if brace_start == -1 or brace_end == -1 or brace_end < brace_start:
+            return [pattern]
+        
+        # Extract the parts before, inside, and after the braces
+        before = pattern[:brace_start]
+        after = pattern[brace_end + 1:]
+        brace_content = pattern[brace_start + 1:brace_end]
+        
+        # Split the brace content by commas, but handle nested braces
+        options = []
+        current_option = ""
+        brace_level = 0
+        
+        for char in brace_content:
+            if char == '{':
+                brace_level += 1
+            elif char == '}':
+                brace_level -= 1
+            elif char == ',' and brace_level == 0:
+                options.append(current_option.strip())
+                current_option = ""
+                continue
+            current_option += char
+        
+        # Add the last option
+        if current_option:
+            options.append(current_option.strip())
+        
+        # If no valid options found, return original pattern
+        if not options:
+            return [pattern]
+        
+        # Expand each option
+        expanded_patterns = []
+        for option in options:
+            expanded_pattern = before + option + after
+            # Recursively expand any remaining braces
+            expanded_patterns.extend(self._expand_braces(expanded_pattern))
+        
+        return expanded_patterns
+
     async def execute(self, pattern: Optional[str] = None, path: Optional[str] = None) -> ToolExecutionResponse:
 
         if not pattern:
@@ -73,13 +125,24 @@ class GlobTool(BaseTool):
             if not base.is_dir():
                 return ToolExecutionResponse.failure(f"Path is not a directory: {base}")
 
-            # 执行 glob 模式查找
-            files = [
-                f for f in base.glob(pattern)
-                if f.is_file() and not f.name.startswith(".")
-            ]
+            # Expand brace patterns
+            patterns = self._expand_braces(pattern)
+            
+            # Collect files from all expanded patterns
+            all_files = set()
+            for expanded_pattern in patterns:
+                try:
+                    files = [
+                        f for f in base.glob(expanded_pattern)
+                        if f.is_file() and not f.name.startswith(".")
+                    ]
+                    all_files.update(files)
+                except Exception as e:
+                    # If one pattern fails, continue with others
+                    continue
 
-            # 按修改时间排序
+            # Convert to list and sort by modification time
+            files = list(all_files)
             files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
             truncated = False
