@@ -44,6 +44,34 @@ class ToolExecutionResponse:
     content: str
     metadata: Optional[str] = None
 
+    @classmethod
+    def success(cls, content: str, metadata: Optional[str] = None) -> "ToolExecutionResponse":
+        """
+        Create a successful tool execution response.
+
+        Args:
+            content: The response content
+            metadata: Optional metadata
+
+        Returns:
+            ToolExecutionResponse with success=True
+        """
+        return cls(success=True, content=content, metadata=metadata)
+
+    @classmethod
+    def failure(cls, content: str, metadata: Optional[str] = None) -> "ToolExecutionResponse":
+        """
+        Create a failed tool execution response.
+
+        Args:
+            content: The error message or failure description
+            metadata: Optional metadata
+
+        Returns:
+            ToolExecutionResponse with success=False
+        """
+        return cls(success=False, content=content, metadata=metadata)
+
 
 class BaseTool(ABC):
     """
