@@ -40,7 +40,7 @@ class ToolExecutionResponse:
     the tool execution result and provide feedback to the user.
     """
 
-    success: bool
+    is_success: bool
     content: str
     metadata: Optional[str] = None
 
@@ -56,7 +56,7 @@ class ToolExecutionResponse:
         Returns:
             ToolExecutionResponse with success=True
         """
-        return cls(success=True, content=content, metadata=metadata)
+        return cls(is_success=True, content=content, metadata=metadata)
 
     @classmethod
     def failure(cls, content: str, metadata: Optional[str] = None) -> "ToolExecutionResponse":
@@ -70,7 +70,7 @@ class ToolExecutionResponse:
         Returns:
             ToolExecutionResponse with success=False
         """
-        return cls(success=False, content=content, metadata=metadata)
+        return cls(is_success=False, content=content, metadata=metadata)
 
 
 class BaseTool(ABC):
