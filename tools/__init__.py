@@ -10,6 +10,11 @@ from .math_tools import add, divide, multiply, subtract
 
 from .tools import BaseTool, ToolInfo, ToolExecutionResponse
 
+# Import file operation tools
+from .ls_tool import LSTool
+from .grep_tool import GrepTool
+from .glob_tool import GlobTool
+
 __all__ = [
     # Math tools
     "add",
@@ -21,6 +26,10 @@ __all__ = [
     "write_file",
     "list_dir",
     "create_dir",
+    # File operation tools
+    "LSTool",
+    "GrepTool",
+    "GlobTool",
     # Tools
     "BaseTool",
     "ToolInfo",

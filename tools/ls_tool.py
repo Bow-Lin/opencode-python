@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 
-from tools import BaseTool, ToolInfo, ToolExecutionResponse
+from .tools import BaseTool, ToolInfo, ToolExecutionResponse
 
 
 @dataclass
@@ -99,7 +99,7 @@ class LSTool(BaseTool):
             if truncated:
                 output = f"[Truncated to {self.MAX_FILES} entries]\n\n" + output
 
-            return ToolExecutionResponse.success(output, metadata=MetaData(total_files=len(all_paths), truncated=truncated))
+            return ToolExecutionResponse.success(output, metadata=str(len(all_paths)))
         except Exception as e:
             return ToolExecutionResponse.failure(f"Error: {e}")
 

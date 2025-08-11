@@ -2,7 +2,7 @@ import os
 import re
 from pathlib import Path
 from typing import Optional, List
-from tools import BaseTool, ToolInfo, ToolExecutionResponse
+from .tools import BaseTool, ToolInfo, ToolExecutionResponse
 
 
 grepDescription = """Fast content search tool that finds files containing specific text or patterns, returning matching file paths sorted by modification time (newest first).
