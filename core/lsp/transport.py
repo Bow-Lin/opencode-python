@@ -106,6 +106,19 @@ class Transport:
         except Exception as e:
             self.logger.error(f"Error sending notification: {e}")
 
+    def send_response(self, response: Dict[str, Any]):
+        """Send a response to the language server."""
+        if not self.process:
+            return
+
+        try:
+            response_json = json.dumps(response)
+            content = f"Content-Length: {len(response_json.encode('utf-8'))}\r\n\r\n{response_json}"
+            self.process.stdin.write(content.encode("utf-8"))
+            self.process.stdin.flush()
+        except Exception as e:
+            self.logger.error(f"Error sending response: {e}")
+
     def _read_response(self, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
         try:
             # 使用缓存读取，避免逐字节读取的性能问题

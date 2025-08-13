@@ -128,10 +128,7 @@ class LSPTools:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # Notify server about file
-            self.client.notify_did_open(file_path, content)
-
-            # Get diagnostics
+            # Get diagnostics (this will handle file opening and waiting for notifications)
             diagnostics = self.client.get_diagnostics(file_path)
 
             # Get document symbols

@@ -339,11 +339,79 @@ class LSPMethods:
 
     def text_document_diagnostic(self, file_path: str) -> List[Diagnostic]:
         """Get diagnostics for the document."""
-        params = {"textDocument": {"uri": f"file://{file_path}"}}
-        response = self.transport.send_request("textDocument/diagnostic", params)
-        if response and "result" in response:
-            return [Diagnostic(**diag) for diag in response["result"]]
-        return []
+        print(f"Getting diagnostics for file: {file_path}")
+        
+        # For pyright-langserver, we need to wait for publishDiagnostics notifications
+        # rather than sending diagnostic requests
+        try:
+            # Read file content and send didOpen notification
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Send didOpen notification to trigger diagnostics
+            self.text_document_did_open(file_path, content, "python")
+            
+            # Wait for the server to process and send diagnostics
+            import time
+            time.sleep(2.0)  # Give more time for pyright to analyze
+            
+            # Read all pending notifications to find diagnostics
+            diagnostics = []
+            max_attempts = 30  # Try more times
+            
+            for attempt in range(max_attempts):
+                msg = self.transport._read_response(timeout=0.3)
+                if msg:
+                    print(f"Received message {attempt + 1}: {msg}")
+                    
+                    # Handle workspace configuration requests
+                    if msg.get("method") == "workspace/configuration":
+                        print("Responding to workspace configuration request")
+                        config_response = {
+                            "jsonrpc": "2.0",
+                            "id": msg.get("id"),
+                            "result": [
+                                {
+                                    "python": {
+                                        "analysis": {
+                                            "typeCheckingMode": "basic",
+                                            "diagnosticMode": "workspace"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                        self.transport.send_response(config_response)
+                        continue
+                    
+                    if msg.get("method") == "textDocument/publishDiagnostics":
+                        params = msg.get("params", {})
+                        print(f"Diagnostics params: {params}")
+                        
+                        if params.get("uri") == f"file://{file_path}":
+                            diagnostics = [Diagnostic(**diag) for diag in params.get("diagnostics", [])]
+                            print(f"Found {len(diagnostics)} diagnostics from notification")
+                            return diagnostics
+                    
+                    elif msg.get("method") == "window/logMessage":
+                        # Log messages from the server
+                        log_msg = msg.get('params', {}).get('message', '')
+                        print(f"LSP log: {log_msg}")
+                        
+                        # Check if this is a diagnostic-related log
+                        if "diagnostic" in log_msg.lower() or "error" in log_msg.lower():
+                            print(f"Diagnostic-related log: {log_msg}")
+                
+                # If we haven't found diagnostics yet, wait a bit more
+                if attempt < max_attempts - 1:
+                    time.sleep(0.2)
+            
+            print(f"No diagnostics found after {max_attempts} attempts")
+            return []
+            
+        except Exception as e:
+            print(f"Error getting diagnostics: {e}")
+            return []
 
     def text_document_formatting(
         self, file_path: str, options: Optional[Dict[str, Any]] = None

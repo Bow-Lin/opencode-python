@@ -91,12 +91,13 @@ class LanguageDetector:
         """Get the language server command for a given language."""
         # Check if the language server is available
         server_commands = {
-            "python": [
-                ["pyright-langserver"],  # Pyright (优先)
-                ["python", "-m", "pylsp"],  # Python Language Server
-                ["python", "-m", "pyright-langserver"],  # Pyright (备用)
-                ["python-lsp-server"],  # python-lsp-server
-            ],
+                    "python": [
+            ["pyright-langserver", "--stdio", "--project", "."],  # Pyright with project root
+            ["pyright-langserver", "--stdio"],  # Pyright (优先)
+            ["python", "-m", "pylsp"],  # Python Language Server
+            ["python", "-m", "pyright-langserver", "--stdio"],  # Pyright (备用)
+            ["python-lsp-server"],  # python-lsp-server
+        ],
             "javascript": [
                 ["npx", "typescript-language-server", "--stdio"],
                 ["npx", "javascript-typescript-langserver", "--stdio"],
@@ -142,22 +143,22 @@ class LanguageDetector:
 
         commands = server_commands.get(language, [])
         for command in commands:
-            if self._is_command_available(command[0]):
+            if self._is_command_available(command):
                 return command
 
         return None
 
-    def _is_command_available(self, command: str) -> bool:
+    def _is_command_available(self, command: list[str]) -> bool:
         """Check if a command is available in the system."""
-        # First check if command exists
-        if shutil.which(command) is None:
+        # First check if the main command exists
+        if shutil.which(command[0]) is None:
             return False
 
-        # For pyright-langserver, also test if it can start
-        if command == "pyright-langserver":
+        # For pyright-langserver and pylsp, also test if they can start
+        if command[0] == "pyright-langserver" or (len(command) > 2 and command[1] == "-m" and command[2] in ["pylsp", "pyright-langserver"]):
             try:
                 result = subprocess.run(
-                    [command, "--stdio"],
+                    command,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,

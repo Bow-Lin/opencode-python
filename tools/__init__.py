@@ -14,6 +14,7 @@ from .tools import BaseTool, ToolInfo, ToolExecutionResponse
 from .ls_tool import LSTool
 from .grep_tool import GrepTool
 from .glob_tool import GlobTool
+from .diagnose_tool import DiagnoseTool
 
 __all__ = [
     # Math tools
@@ -30,6 +31,7 @@ __all__ = [
     "LSTool",
     "GrepTool",
     "GlobTool",
+    "DiagnoseTool",
     # Tools
     "BaseTool",
     "ToolInfo",
