@@ -54,15 +54,6 @@ class DiagnoseTool(BaseTool):
 
         try:
             lsp = get_lsp_tools()
-            
-            # 检查LSP服务器是否可用
-            # 尝试启动Python语言服务器
-            language = lsp.client.language_detector.detect_language(str(file_path))
-            if language == "python":
-                server_command = lsp.client.language_detector.get_language_server_command(language)
-                if not server_command:
-                    return ToolExecutionResponse.failure("No Python LSP server available. Please install pyright-langserver or pylsp.")
-            
             result = lsp.analyze_file(str(file_path))
             if "error" in result:
                 return ToolExecutionResponse.failure(f"LSP analysis error: {result['error']}")

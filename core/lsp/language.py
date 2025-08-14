@@ -92,8 +92,8 @@ class LanguageDetector:
         # Check if the language server is available
         server_commands = {
                     "python": [
-            ["pyright-langserver", "--stdio", "--project", "."],  # Pyright with project root
             ["pyright-langserver", "--stdio"],  # Pyright (优先)
+            ["pyright-langserver", "--stdio", "--project", "."],  # Pyright with project root
             ["python", "-m", "pylsp"],  # Python Language Server
             ["python", "-m", "pyright-langserver", "--stdio"],  # Pyright (备用)
             ["python-lsp-server"],  # python-lsp-server

@@ -2,9 +2,12 @@
 LSP methods implementation.
 """
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .protocol import Position, Range, CompletionItem, Diagnostic, Location
 from .transport import Transport
+
+import time
 
 
 class LSPMethods:
@@ -337,81 +340,98 @@ class LSPMethods:
         response = self.transport.send_request("textDocument/inlineCompletion", params)
         return response.get("result") if response else None
 
+
+
     def text_document_diagnostic(self, file_path: str) -> List[Diagnostic]:
         """Get diagnostics for the document."""
-        print(f"Getting diagnostics for file: {file_path}")
-        
-        # For pyright-langserver, we need to wait for publishDiagnostics notifications
-        # rather than sending diagnostic requests
         try:
-            # Read file content and send didOpen notification
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Send didOpen notification to trigger diagnostics
+            content = Path(file_path).read_text(encoding='utf-8')
+
+            # === 先完成一次握手（只处理 workspace/configuration） ===
+            handshake_deadline = time.time() + 2.0
+            while time.time() < handshake_deadline:
+                msg = self.transport._read_response(timeout=0.2)
+                if not msg:
+                    continue
+                if msg.get("method") == "workspace/configuration":
+                    items = msg.get("params", {}).get("items", [])
+                    results = []
+                    for it in items:
+                        sec = it.get("section")
+                        if sec == "python":
+                            results.append({})
+                        elif sec == "python.analysis":
+                            results.append({
+                                "typeCheckingMode": "basic",
+                                "diagnosticMode": "workspace"
+                            })
+                        elif sec == "pyright":
+                            results.append({})
+                        else:
+                            results.append(None)
+                    self.transport.send_response({
+                        "jsonrpc": "2.0",
+                        "id": msg.get("id"),
+                        "result": results
+                    })
+                elif msg.get("method") == "window/logMessage":
+                    print("LSP log:", msg.get("params", {}).get("message"))
+
+            # === 握手完成后再 didOpen ===
             self.text_document_did_open(file_path, content, "python")
-            
-            # Wait for the server to process and send diagnostics
-            import time
-            time.sleep(2.0)  # Give more time for pyright to analyze
-            
-            # Read all pending notifications to find diagnostics
-            diagnostics = []
-            max_attempts = 30  # Try more times
-            
+
+            diagnostics = None
+            max_attempts = 30
+
             for attempt in range(max_attempts):
                 msg = self.transport._read_response(timeout=0.3)
-                if msg:
-                    print(f"Received message {attempt + 1}: {msg}")
-                    
-                    # Handle workspace configuration requests
-                    if msg.get("method") == "workspace/configuration":
-                        print("Responding to workspace configuration request")
-                        config_response = {
-                            "jsonrpc": "2.0",
-                            "id": msg.get("id"),
-                            "result": [
-                                {
-                                    "python": {
-                                        "analysis": {
-                                            "typeCheckingMode": "basic",
-                                            "diagnosticMode": "workspace"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                        self.transport.send_response(config_response)
-                        continue
-                    
-                    if msg.get("method") == "textDocument/publishDiagnostics":
-                        params = msg.get("params", {})
-                        print(f"Diagnostics params: {params}")
-                        
-                        if params.get("uri") == f"file://{file_path}":
-                            diagnostics = [Diagnostic(**diag) for diag in params.get("diagnostics", [])]
-                            print(f"Found {len(diagnostics)} diagnostics from notification")
-                            return diagnostics
-                    
-                    elif msg.get("method") == "window/logMessage":
-                        # Log messages from the server
-                        log_msg = msg.get('params', {}).get('message', '')
-                        print(f"LSP log: {log_msg}")
-                        
-                        # Check if this is a diagnostic-related log
-                        if "diagnostic" in log_msg.lower() or "error" in log_msg.lower():
-                            print(f"Diagnostic-related log: {log_msg}")
-                
-                # If we haven't found diagnostics yet, wait a bit more
-                if attempt < max_attempts - 1:
-                    time.sleep(0.2)
-            
-            print(f"No diagnostics found after {max_attempts} attempts")
-            return []
-            
+                if not msg:
+                    if attempt < max_attempts - 1:
+                        time.sleep(0.2)
+                    continue
+                if msg.get("method") == "workspace/configuration":
+                    # 握手之后还有迟到的 config 请求，也要回
+                    items = msg.get("params", {}).get("items", [])
+                    results = []
+                    for it in items:
+                        sec = it.get("section")
+                        if sec == "python":
+                            results.append({})
+                        elif sec == "python.analysis":
+                            results.append({
+                                "typeCheckingMode": "basic",
+                                "diagnosticMode": "workspace"
+                            })
+                        elif sec == "pyright":
+                            results.append({})
+                        else:
+                            results.append(None)
+                    self.transport.send_response({
+                        "jsonrpc": "2.0",
+                        "id": msg.get("id"),
+                        "result": results
+                    })
+                    continue
+
+                if msg.get("method") == "textDocument/publishDiagnostics":
+                    params = msg.get("params", {})
+
+                    if params.get("uri") == Path(file_path).resolve().as_uri():
+                        if diagnostics is None or diagnostics == []:
+                            diagnostics = [Diagnostic(**d) for d in params.get("diagnostics", [])]
+                            if diagnostics:
+                                return diagnostics
+
+                elif msg.get("method") == "window/logMessage":
+                    log_msg = msg.get('params', {}).get('message', '')
+                    print(f"LSP log: {log_msg}")
+
+            return diagnostics or []
+
         except Exception as e:
             print(f"Error getting diagnostics: {e}")
             return []
+
 
     def text_document_formatting(
         self, file_path: str, options: Optional[Dict[str, Any]] = None

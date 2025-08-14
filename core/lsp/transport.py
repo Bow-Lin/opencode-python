@@ -96,7 +96,6 @@ class Transport:
         """Send a notification to the language server."""
         if not self.process:
             return
-
         notification = {"jsonrpc": "2.0", "method": method, "params": params}
         try:
             notification_json = json.dumps(notification)

@@ -59,6 +59,7 @@ class LSPClient:
 
         # Check if we have an active server for this language
         if language in self._active_servers:
+            print(f"client.py get_language_server active server: {self._active_servers}")
             transport = self._active_servers[language]
             return LSPMethods(transport)
 

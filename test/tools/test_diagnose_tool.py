@@ -1,4 +1,6 @@
 import os
+import subprocess
+from pathlib import Path
 import re
 import tempfile
 
@@ -39,16 +41,13 @@ class TestDiagnoseTool:
 
     @pytest.mark.asyncio
     async def test_execute_bug_file(self, diagnose_tool):
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
-            f.write("def bad(:\n    pass\n")
-            path = f.name
-            temp_path = "/home/deming/work/opencode-python/agents/base.py"
+        test_path = "/home/deming/work/opencode-python/agents/runner.py"
         try:
-            response = await diagnose_tool.execute(path=temp_path)
-            print(f"response: {response}")
+            # LSP-based diagnostics
+            response = await diagnose_tool.execute(path=test_path)
             assert response.is_success
             assert ("Diagnostics:" in response.content) or ("No diagnostics found" in response.content)
-            
+            print(f"response: {response}")
             metadata = response.metadata
             diagnostics_count = 0
             if isinstance(metadata, dict):
@@ -66,4 +65,4 @@ class TestDiagnoseTool:
             if "Diagnostics:" in response.content:
                 assert diagnostics_count > 0
         finally:
-            os.remove(path)
+            pass
