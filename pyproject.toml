@@ -10,6 +10,7 @@ dependencies = [
     "openai",
     "python-dotenv",
     "pydantic",
+    "patch-ng>=1.18.1",
 ]
 
 [project.optional-dependencies]
