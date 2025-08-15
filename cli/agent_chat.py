@@ -4,10 +4,11 @@ Enhanced CLI with SimpleToolAgent integration
 """
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
+import asyncio
 
 import typer
 
-from agents import AgentInput, SimpleToolAgent
+from agents import AgentInput, BaseAgent, CodeAgent
 from providers import create_default_manager
 from tool_registry.registry import list_tools_with_info
 from tools.file_tools import create_dir, list_dir, read_file, write_file
@@ -21,7 +22,7 @@ class AgentChatContext:
     """Context for agent chat commands"""
 
     manager: Any
-    agent: SimpleToolAgent
+    agent: BaseAgent
     available_providers: list
     current_system_prompt: Optional[str] = None
 
@@ -147,6 +148,8 @@ class AgentCommandHandler:
             # Use agent to plan and execute
             plan_result = self.context.agent.plan(input_data)
             output = self.context.agent.run(plan_result)
+            if asyncio.iscoroutine(output):
+                output = asyncio.run(output)
 
             # Display results
             typer.echo(f"Agent: {output.result}")
@@ -278,7 +281,7 @@ def start_chat(
         typer.echo(f"System prompt: {system_prompt}")
 
     # Initialize agent
-    agent = SimpleToolAgent()
+    agent = CodeAgent()
     typer.echo(f"Agent initialized: {type(agent).__name__}")
 
     typer.echo("\nCommands:")
@@ -329,6 +332,8 @@ def start_chat(
                     # Use agent to plan and execute
                     plan_result = agent.plan(input_data)
                     output = agent.run(plan_result)
+                    if asyncio.iscoroutine(output):
+                        output = asyncio.run(output)
 
                     # Display results
                     typer.echo(f"Assistant: {output.result}")
