@@ -71,13 +71,14 @@ class QwenProvider(BaseProvider):
         except Exception:
             return False
 
-    def generate(self, user_query: str, prompt: Optional[str] = None, **kwargs) -> str:
+    def generate(self, user_query: str, prompt: Optional[str] = None, tools: Optional[list] = None, **kwargs) -> str:
         """
         Generate text using Qwen API.
 
         Args:
             user_query: User's input message/query
             prompt: Optional system prompt to set the model's behavior
+            tools: Optional list of tools for function calling
             **kwargs: Additional generation parameters
 
         Returns:
@@ -121,11 +122,15 @@ class QwenProvider(BaseProvider):
             "presence_penalty": kwargs.get("presence_penalty", 0.0),
         }
 
+        # Add tools if provided
+        if tools:
+            generation_params["tools"] = tools
+            generation_params["tool_choice"] = kwargs.get("tool_choice", "auto")
+
         # Remove None values
         generation_params = {
             k: v for k, v in generation_params.items() if v is not None
         }
-
         try:
             response = requests.post(
                 f"{self.config['base_url']}/chat/completions",

@@ -1,0 +1,291 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "ls",
+      "description": "Directory listing tool that shows files and subdirectories in a tree structure, helping you explore and understand the project organization.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to the directory (default: current directory)"
+          },
+          "ignore": {
+            "type": "array",
+            "description": "Glob patterns to ignore",
+            "items": {"type": "string"}
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "grep",
+      "description": "Fast content search tool that finds files containing specific text or patterns, returning matching file paths sorted by modification time (newest first).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Regex pattern or literal text to search for"
+          },
+          "path": {
+            "type": "string",
+            "description": "Search root path (default: current directory)"
+          },
+          "include": {
+            "type": "string",
+            "description": "Glob-style file pattern filter (e.g., *.py or *.{js,ts})"
+          },
+          "literal_text": {
+            "type": "boolean",
+            "description": "Treat pattern as literal text if true"
+          }
+        },
+        "required": ["pattern"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "glob",
+      "description": "Fast file pattern matching tool that finds files by name and pattern, returning matching paths sorted by modification time (newest first).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "The glob pattern to match files (e.g., **/*.py)"
+          },
+          "path": {
+            "type": "string",
+            "description": "The directory to start search from. Defaults to current directory."
+          }
+        },
+        "required": ["pattern"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "diagnose",
+      "description": "Code diagnostics tool powered by Language Server Protocol (LSP) analysis. It can help you analyze the code and find errors.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to the file to analyse"
+          }
+        },
+        "required": ["path"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "description": "Read content from a file",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to the file to read"
+          },
+          "encoding": {
+            "type": "string",
+            "description": "File encoding (default: utf-8)"
+          }
+        },
+        "required": ["file_path"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "write_file",
+      "description": "Write content to a file",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to the file to write"
+          },
+          "content": {
+            "type": "string",
+            "description": "Content to write"
+          },
+          "encoding": {
+            "type": "string",
+            "description": "File encoding (default: utf-8)"
+          }
+        },
+        "required": ["file_path", "content"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_dir",
+      "description": "List contents of a directory",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dir_path": {
+            "type": "string",
+            "description": "Path to the directory to list"
+          },
+          "include_files": {
+            "type": "boolean",
+            "description": "Include files (default: True)"
+          },
+          "include_dirs": {
+            "type": "boolean",
+            "description": "Include directories (default: True)"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_dir",
+      "description": "Create a directory",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dir_path": {
+            "type": "string",
+            "description": "Path to the directory to create"
+          },
+          "exist_ok": {
+            "type": "boolean",
+            "description": "If True, don't raise error if directory exists (default: True)"
+          }
+        },
+        "required": ["dir_path"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "add",
+      "description": "Add two or more numbers together",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "numbers": {
+            "type": "array",
+            "description": "List of numbers to add",
+            "items": {"type": "number"}
+          }
+        },
+        "required": ["numbers"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "subtract",
+      "description": "Subtract numbers from the first number",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "numbers": {
+            "type": "array",
+            "description": "List of numbers to subtract"
+          }
+        },
+        "required": ["numbers"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "multiply",
+      "description": "Multiply two or more numbers together",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "numbers": {
+            "type": "array",
+            "description": "List of numbers to multiply",
+            "items": {"type": "number"}
+          }
+        },
+        "required": ["numbers"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "divide",
+      "description": "Divide the first number by subsequent numbers",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "numbers": {
+            "type": "array",
+            "description": "List of numbers to divide",
+            "items": {"type": "number"}
+          }
+        },
+        "required": ["numbers"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "patch",
+      "description": "Apply a patch to files using git apply or patch-ng",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "diff_text": {
+            "type": "string",
+            "description": "The patch content to apply"
+          },
+          "root": {
+            "type": "string",
+            "description": "Root directory to apply patch (default: current directory)"
+          },
+          "strip": {
+            "type": "integer",
+            "description": "Number of path components to strip (default: 0)"
+          },
+          "reverse": {
+            "type": "boolean",
+            "description": "Apply patch in reverse (default: false)"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Check if patch can be applied without actually applying (default: false)"
+          },
+          "encoding": {
+            "type": "string",
+            "description": "Encoding for patch content (default: utf-8)"
+          }
+        },
+        "required": ["diff_text"]
+      }
+    }
+  }
+]

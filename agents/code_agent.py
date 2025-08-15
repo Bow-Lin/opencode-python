@@ -96,23 +96,28 @@ class CodeAgent(BaseAgent):
         """Use provider to determine tool and parameters when not explicit."""
 
         system_prompt = """You are a code assistant. Choose the best tool for the user's request.
-        Available tools: ls, grep, patch, diagnose.Return ONLY a JSON object with this structure:
-        {
-          "plan": "description",
-          "tools": ["ls"|"grep"|"patch"|"diagnose"],
-          "parameters": { ... }
-        }
-        for example:
+        Tools are passed in parameters as a list of tool names.You must always answer by selecting one or more tools 
+        from the provided tool list and filling the parameters. Never answer directly without using a tool.
+        For example:
         {
           "plan": "Run diagnostics on a file",
           "tools": ["diagnose"],
           "parameters": {"path": "."}
         }
+        Return ONLY a JSON object with this structure:
+        {
+          "plan": "description",
+          "tools": ["ls"|"grep"|"patch"|"diagnose"],
+          "parameters": { ... }
+        }
         """
+        with open("tools/tools.json", "r") as f:
+            tools = json.load(f)
         try:
             response = self.provider.generate(
                 user_query=input_data.query,
                 prompt=system_prompt,
+                tools=tools,
                 temperature=0.1,
             )
             print(f"qwen response: {response}")
