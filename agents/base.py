@@ -1,6 +1,8 @@
 """
 Base Agent implementation
 """
+import warnings
+import copy
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from enum import Enum
@@ -90,11 +92,51 @@ class PlanResult(BaseModel):
     )
 
 
+class _ConditionalTransition:
+    """Helper class for conditional transitions"""
+    def __init__(self, src: 'BaseAgent', action: str):
+        self.src = src
+        self.action = action
+    
+    def __rshift__(self, target: 'BaseAgent') -> 'BaseAgent':
+        return self.src.next(target, self.action)
+
+
 class BaseAgent(ABC):
-    """Abstract base class for all agents"""
+    """Abstract base class for all agents with flow control capabilities"""
 
     def __init__(self, name: str = "BaseAgent"):
         self.name = name
+        self.successors: Dict[str, 'BaseAgent'] = {}
+        self.params: Dict[str, Any] = {}
+
+    def set_params(self, params: Dict[str, Any]) -> None:
+        """Set parameters for the agent"""
+        self.params = params
+
+    def next(self, node: 'BaseAgent', action: str = "default") -> 'BaseAgent':
+        """Set the next node in the flow"""
+        if action in self.successors:
+            warnings.warn(f"Overwriting successor for action '{action}'")
+        self.successors[action] = node
+        return node
+
+    def get_next_node(self, action: Optional[str] = None) -> Optional['BaseAgent']:
+        """Get the next node based on action"""
+        next_node = self.successors.get(action or "default")
+        if not next_node and self.successors:
+            warnings.warn(f"Flow ends: '{action}' not found in {list(self.successors.keys())}")
+        return next_node
+
+    def __rshift__(self, other: 'BaseAgent') -> 'BaseAgent':
+        """Operator for setting default successor"""
+        return self.next(other)
+
+    def __sub__(self, action: str) -> _ConditionalTransition:
+        """Operator for creating conditional transitions"""
+        if isinstance(action, str):
+            return _ConditionalTransition(self, action)
+        raise TypeError("Action must be a string")
 
     @abstractmethod
     def plan(self, input_data: AgentInput) -> PlanResult:
@@ -122,9 +164,54 @@ class BaseAgent(ABC):
         """
         pass
 
+    async def post(self, context: Any, plan_result: PlanResult, exec_result: AgentOutput) -> AgentOutput:
+        """
+        Post-processing after execution
+        
+        Args:
+            context: Context store or shared data
+            plan_result: Result from planning phase
+            exec_result: Result from execution phase
+            
+        Returns:
+            Processed AgentOutput
+        """
+        return exec_result
+
+    async def _run_async(self, context: Any, input_data: AgentInput) -> AgentOutput:
+        """
+        Internal async execution method (equivalent to BaseNode._run)
+        
+        Args:
+            context: Context store or shared data
+            input_data: Agent input data
+            
+        Returns:
+            AgentOutput with execution results
+        """
+        plan_result = self.plan(input_data)
+        exec_result = await self.run(plan_result)
+        return await self.post(context, plan_result, exec_result)
+
+    async def run_async(self, context: Any, input_data: AgentInput) -> AgentOutput:
+        """
+        Async execution method for single node (equivalent to BaseNode.run_async)
+        
+        Args:
+            context: Context store or shared data
+            input_data: Agent input data
+            
+        Returns:
+            AgentOutput with execution results
+        """
+        if self.successors:
+            warnings.warn("Node won't run successors. Use AsyncFlow.")
+        return await self._run_async(context, input_data)
+
+    # Backward compatibility methods
     async def execute(self, input_data: AgentInput) -> AgentOutput:
         """
-        Complete execution flow: plan then run
+        Complete execution flow: plan then run (backward compatibility)
 
         Args:
             input_data: Agent input data
@@ -134,6 +221,100 @@ class BaseAgent(ABC):
         """
         plan_result = self.plan(input_data)
         return await self.run(plan_result)
+
+
+class AsyncFlow(BaseAgent):
+    """Flow control for orchestrating multiple agents"""
+
+    def __init__(self, name: str = "AsyncFlow", start_node: Optional[BaseAgent] = None):
+        super().__init__(name)
+        self.start_node = start_node
+
+    def start(self, start_node: BaseAgent) -> BaseAgent:
+        """Set the start node of the flow"""
+        self.start_node = start_node
+        return start_node
+
+    async def _orch_async(self, context: Any, input_data: AgentInput, params: Optional[Dict[str, Any]] = None) -> AgentOutput:
+        """
+        Orchestrate the flow execution (equivalent to AsyncFlow._orch_async)
+        
+        Args:
+            context: Context store or shared data
+            input_data: Agent input data
+            params: Additional parameters
+            
+        Returns:
+            Final AgentOutput from the flow
+        """
+        if not self.start_node:
+            raise RuntimeError("No start node set for flow")
+            
+        current = copy.copy(self.start_node)
+        current_params = params or {**self.params}
+        last_action = None
+        
+        # Set flow parameters in context if it's a ContextStore
+        if hasattr(context, 'set_flow_params'):
+            context.set_flow_params(current_params)
+        
+        while current:
+            current.set_params(current_params)
+            result = await current._run_async(context, input_data)
+            
+            # Record flow step in context if it's a ContextStore
+            if hasattr(context, 'record_flow_step'):
+                context.record_flow_step(
+                    agent_name=current.name,
+                    action=last_action or "default",
+                    result=result,
+                    metadata=result.metadata
+                )
+            
+            # Determine next action based on result
+            # This is a simple implementation - you might want to customize this logic
+            if hasattr(result, 'metadata') and result.metadata and 'action' in result.metadata:
+                last_action = result.metadata['action']
+            else:
+                last_action = "default"
+            
+            current = copy.copy(current.get_next_node(last_action))
+        
+        return result
+
+    async def _run_async(self, context: Any, input_data: AgentInput) -> AgentOutput:
+        """
+        Internal async execution method for flow
+        
+        Args:
+            context: Context store or shared data
+            input_data: Agent input data
+            
+        Returns:
+            AgentOutput with execution results
+        """
+        plan_result = self.plan(input_data)
+        exec_result = await self._orch_async(context, input_data)
+        return await self.post(context, plan_result, exec_result)
+
+    async def post(self, context: Any, plan_result: PlanResult, exec_result: AgentOutput) -> AgentOutput:
+        """Post-processing for flow execution"""
+        return exec_result
+
+    # Implement abstract methods for flow
+    def plan(self, input_data: AgentInput) -> PlanResult:
+        """Plan for flow execution"""
+        return PlanResult(
+            plan=f"Execute flow starting with {self.start_node.name if self.start_node else 'undefined'}",
+            tools_to_use=[],
+            parameters={},
+            metadata={"flow": True, "start_node": self.start_node.name if self.start_node else None}
+        )
+
+    async def run(self, plan_result: PlanResult) -> AgentOutput:
+        """Run the flow (this is handled by _orch_async)"""
+        # This method is not used in flow execution, but required by abstract base
+        raise RuntimeError("Use run_async for flow execution")
 
 
 # State management for agents (equivalent to TypeScript App.state)
