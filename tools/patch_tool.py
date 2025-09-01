@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 import textwrap
+from typing import List
 
 import patch_ng as patch  # pure-Python fallback
 
@@ -204,3 +205,145 @@ class PatchTool(BaseTool):
             return ToolExecutionResponse.success(msg)
         except Exception as e:
             return ToolExecutionResponse.failure(f"Error applying patch: {e}")
+    
+    def generate_patch(self, original_code: str, modified_code: str, filename: str = "file.py", context_lines: int = 3) -> str:
+        """
+        Generate unified diff patch from original and modified code.
+        
+        Args:
+            original_code: Original code as string
+            modified_code: Modified code as string
+            filename: Name of the file being modified
+            context_lines: Number of context lines to include
+            
+        Returns:
+            Unified diff format patch string
+        """
+        return generate_patch_from_code_blocks(original_code, modified_code, filename, context_lines)
+    
+    def generate_function_replacement_patch(
+        self, 
+        original_file_content: str, 
+        function_name: str, 
+        new_function_code: str,
+        context_lines: int = 3
+    ) -> str:
+        """
+        Generate patch for replacing a specific function.
+        
+        Args:
+            original_file_content: Original file content
+            function_name: Name of the function to replace
+            new_function_code: New function code
+            context_lines: Number of context lines to include
+            
+        Returns:
+            Unified diff format patch string
+        """
+        return generate_patch_for_function_replacement(
+            original_file_content,
+            function_name,
+            new_function_code,
+            context_lines
+        )
+
+
+def generate_unified_diff(
+    original_lines: List[str],
+    modified_lines: List[str],
+    filename: str = "file.py",
+    context_lines: int = 3
+) -> str:
+    """
+    Generate unified diff format patch from original and modified code.
+    
+    Args:
+        original_lines: List of original code lines
+        modified_lines: List of modified code lines
+        filename: Name of the file being modified
+        context_lines: Number of context lines to include
+        
+    Returns:
+        Unified diff format patch string
+    """
+    import difflib
+    
+    # Generate unified diff
+    diff = difflib.unified_diff(
+        original_lines,
+        modified_lines,
+        fromfile=f"a/{filename}",
+        tofile=f"b/{filename}",
+        lineterm="",
+        n=context_lines
+    )
+    
+    return "\n".join(diff)
+
+
+def generate_patch_from_code_blocks(
+    original_code: str,
+    modified_code: str,
+    filename: str = "file.py",
+    context_lines: int = 3
+) -> str:
+    """
+    Generate patch from original and modified code strings.
+    
+    Args:
+        original_code: Original code as string
+        modified_code: Modified code as string
+        filename: Name of the file being modified
+        context_lines: Number of context lines to include
+        
+    Returns:
+        Unified diff format patch string
+    """
+    # Split into lines
+    original_lines = original_code.splitlines(keepends=True)
+    modified_lines = modified_code.splitlines(keepends=True)
+    
+    return generate_unified_diff(original_lines, modified_lines, filename, context_lines)
+
+
+def generate_patch_for_function_replacement(
+    original_file_content: str,
+    function_name: str,
+    new_function_code: str,
+    context_lines: int = 3
+) -> str:
+    """
+    Generate patch for replacing a specific function in a file.
+    
+    Args:
+        original_file_content: Original file content as string
+        original_file_path: Path to the original file
+        function_name: Name of the function to replace
+        new_function_code: New function code as string
+        context_lines: Number of context lines to include
+        
+    Returns:
+        Unified diff format patch string
+    """
+    import re
+    
+    # Find the function in the original file
+    # This is a simple regex-based approach - could be enhanced with AST parsing
+    function_pattern = rf"def\s+{re.escape(function_name)}\s*\([^)]*\)[^:]*:(?:\s*#[^\n]*)?\n(.*?)(?=\n\S|\Z)"
+    
+    match = re.search(function_pattern, original_file_content, re.DOTALL)
+    if not match:
+        raise ValueError(f"Function '{function_name}' not found in the file")
+    
+    # Get the original function code
+    original_function = match.group(0)
+    original_lines = original_function.splitlines(keepends=True)
+    
+    # Prepare new function code
+    new_lines = new_function_code.splitlines(keepends=True)
+    
+    # Generate patch
+    return generate_unified_diff(original_lines, new_lines, "file.py", context_lines)
+
+
+
