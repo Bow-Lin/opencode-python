@@ -160,7 +160,21 @@ class CodeAgent(BaseAgent):
                             response.content, 
                             plan_result.parameters.get("path")
                         )
+                        
+                        # Extract code from fix suggestions and apply patches
+                        print("run extract_and_apply_fixes")
+                        patch_result = await self._extract_and_apply_fixes(
+                            fix_suggestions, 
+                            plan_result.parameters.get("path")
+                        )
+                        print("--------------------------------")
+                        print(" file path: ",plan_result.parameters.get("path"))
+                        print(f"patch_result: {patch_result}")
+                        
                         combined_result = f"{response.content}\n\n=== Fix Suggestions ===\n{fix_suggestions}"
+                        if patch_result:
+                            combined_result += f"\n\n=== Patch Application Result ===\n{patch_result}"
+                        
                         results.append(combined_result)
                     else:
                         results.append(response.content)
@@ -241,3 +255,75 @@ Please answer in Chinese, but use English for code comments."""
             return response
         except Exception as e:
             return f"Error generating fix suggestions: {str(e)}"
+    
+    async def _extract_and_apply_fixes(self, fix_suggestions: str, file_path: str) -> Optional[str]:
+        """
+        Extract code from fix suggestions and apply patches to the target file.
+        
+        Args:
+            fix_suggestions: AI-generated fix suggestions containing code
+            file_path: Path to the file to be modified
+            
+        Returns:
+            String describing the patch application result, or None if no patches applied
+        """
+        if not file_path:
+            return None
+            
+        try:
+            from utils.code_extraction import extract_python_code
+            
+            # Extract Python code blocks from fix suggestions
+            python_codes = extract_python_code(fix_suggestions)
+            
+            if not python_codes:
+                return "No Python code found in fix suggestions"
+            
+            # Read the original file content
+            with open(file_path, 'r', encoding='utf-8') as f:
+                original_content = f.read()
+            
+            patch_results = []
+            
+            for i, new_code in enumerate(python_codes):
+                try:
+                    # Generate patch using patch tool
+                    patch = self.patch_tool.generate_patch(
+                        original_code=original_content,
+                        modified_code=new_code,
+                        filename=file_path,
+                        context_lines=3
+                    )
+                    # Apply the patch (dry run first to validate)
+                    dry_run_response = await self.patch_tool.execute(
+                        diff=patch,
+                        root=".",
+                        dry_run=True
+                    )
+                    if dry_run_response.success:
+                        # Apply the patch for real
+                        apply_response = await self.patch_tool.execute(
+                            diff=patch,
+                            root=".",
+                            dry_run=False
+                        )
+                        if apply_response.success:
+                            patch_results.append(f"✅ Patch {i+1} applied successfully")
+                            # Update original content for next iteration
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                original_content = f.read()
+                        else:
+                            patch_results.append(f"❌ Patch {i+1} application failed: {apply_response.content}")
+                    else:
+                        patch_results.append(f"❌ Patch {i+1} validation failed: {dry_run_response.content}")
+                        
+                except Exception as e:
+                    patch_results.append(f"❌ Patch {i+1} error: {str(e)}")
+            
+            if patch_results:
+                return "\n".join(patch_results)
+            else:
+                return "No patches were applied"
+                
+        except Exception as e:
+            return f"Error during patch extraction and application: {str(e)}"

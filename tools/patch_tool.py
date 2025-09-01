@@ -32,9 +32,12 @@ def _apply_with_git(
         return False, "git not found"
 
     args = ["git", "apply", f"-p{strip}"]
-    # Change to the target directory before applying
-    if root_abs != ".":
+    # Only add --directory if the original root was not "." (current directory)
+    # root_abs is always absolute path, so we need to check if it's the current working directory
+    current_dir = os.path.abspath(".")
+    if root_abs != current_dir:
         args.extend(["--directory", root_abs])
+    
     if reverse:
         args.append("-R")
     if dry_run:
@@ -219,7 +222,92 @@ class PatchTool(BaseTool):
         Returns:
             Unified diff format patch string
         """
-        return generate_patch_from_code_blocks(original_code, modified_code, filename, context_lines)
+        # Check if modified_code is a complete file or just a code snippet
+        if len(modified_code.splitlines()) < len(original_code.splitlines()) * 0.8:
+            # If modified_code is much shorter, treat it as a snippet and try to find where it fits
+            patch = self._generate_snippet_patch(original_code, modified_code, filename, context_lines)
+        else:
+            # Treat as complete file replacement
+            patch = generate_patch_from_code_blocks(original_code, modified_code, filename, context_lines)
+        
+        return patch
+    
+    def _generate_snippet_patch(self, original_code: str, snippet_code: str, filename: str, context_lines: int = 3) -> str:
+        """
+        Generate patch for a code snippet that should replace part of the original code.
+        
+        Args:
+            original_code: Original file content
+            snippet_code: Code snippet to insert/replace
+            filename: Name of the file
+            context_lines: Number of context lines
+            
+        Returns:
+            Unified diff format patch string
+        """
+        import difflib
+        
+        # Split into lines
+        original_lines = original_code.splitlines(keepends=True)
+        snippet_lines = snippet_code.splitlines(keepends=True)
+        
+        # Try to find the best match for the snippet in the original code
+        matcher = difflib.SequenceMatcher(None, original_code, snippet_code)
+        matches = matcher.get_matching_blocks()
+        
+        if len(matches) > 1:
+            # Find the best matching block
+            best_match = max(matches[:-1], key=lambda x: x.size)
+            if best_match.size > 0:
+                # Generate patch for the replacement
+                start_line = best_match.a
+                end_line = start_line + best_match.size
+                
+                # Create the patch
+                patch_lines = []
+                base_filename = os.path.basename(filename)
+                patch_lines.append(f"--- a/{base_filename}")
+                patch_lines.append(f"+++ b/{base_filename}")
+                patch_lines.append(f"@@ -{start_line + 1},{end_line - start_line} +{start_line + 1},{len(snippet_lines)} @@")
+                
+                # Add context lines before
+                context_start = max(0, start_line - context_lines)
+                for i in range(context_start, start_line):
+                    patch_lines.append(f" {original_lines[i].rstrip()}")
+                
+                # Add removed lines
+                for i in range(start_line, end_line):
+                    patch_lines.append(f"-{original_lines[i].rstrip()}")
+                
+                # Add added lines
+                for i in range(context_start, start_line):
+                    patch_lines.append(f" {original_lines[i].rstrip()}")
+                for line in snippet_lines:
+                    patch_lines.append(f"+{line.rstrip()}")
+                
+                # Add context lines after
+                context_end = min(len(original_lines), end_line + context_lines)
+                for i in range(end_line, context_end):
+                    patch_lines.append(f" {original_lines[i].rstrip()}")
+                
+                return "\n".join(patch_lines)
+        
+        # Fallback: simple replacement at the beginning
+        patch_lines = []
+        base_filename = os.path.basename(filename)
+        patch_lines.append(f"--- a/{base_filename}")
+        patch_lines.append(f"+++ b/{base_filename}")
+        patch_lines.append(f"@@ -1,{len(original_lines)} +1,{len(snippet_lines)} @@")
+        
+        # Remove all original lines
+        for line in original_lines:
+            patch_lines.append(f"-{line.rstrip()}")
+        
+        # Add all new lines
+        for line in snippet_lines:
+            patch_lines.append(f"+{line.rstrip()}")
+        
+        return "\n".join(patch_lines)
     
     def generate_function_replacement_patch(
         self, 
@@ -267,13 +355,17 @@ def generate_unified_diff(
         Unified diff format patch string
     """
     import difflib
+    import os
+    
+    # Extract just the filename without full path for git patch format
+    base_filename = os.path.basename(filename)
     
     # Generate unified diff
     diff = difflib.unified_diff(
         original_lines,
         modified_lines,
-        fromfile=f"a/{filename}",
-        tofile=f"b/{filename}",
+        fromfile=f"a/{base_filename}",
+        tofile=f"b/{base_filename}",
         lineterm="",
         n=context_lines
     )
@@ -303,7 +395,48 @@ def generate_patch_from_code_blocks(
     original_lines = original_code.splitlines(keepends=True)
     modified_lines = modified_code.splitlines(keepends=True)
     
-    return generate_unified_diff(original_lines, modified_lines, filename, context_lines)
+    # Use manual patch generation for better control
+    return _generate_manual_patch(original_lines, modified_lines, filename, context_lines)
+
+
+def _generate_manual_patch(
+    original_lines: List[str],
+    modified_lines: List[str],
+    filename: str,
+    context_lines: int = 3
+) -> str:
+    """
+    Generate patch manually for better control over the format.
+    
+    Args:
+        original_lines: List of original code lines
+        modified_lines: List of modified code lines
+        filename: Name of the file being modified
+        context_lines: Number of context lines to include
+        
+    Returns:
+        Unified diff format patch string
+    """
+    import os
+    
+    base_filename = os.path.basename(filename)
+    
+    # For now, use a simple approach: replace the entire file
+    # This is more reliable than trying to find specific differences
+    patch_lines = []
+    patch_lines.append(f"--- a/{base_filename}")
+    patch_lines.append(f"+++ b/{base_filename}")
+    patch_lines.append(f"@@ -1,{len(original_lines)} +1,{len(modified_lines)} @@")
+    
+    # Remove all original lines
+    for line in original_lines:
+        patch_lines.append(f"-{line.rstrip()}")
+    
+    # Add all new lines
+    for line in modified_lines:
+        patch_lines.append(f"+{line.rstrip()}")
+    
+    return "\n".join(patch_lines)
 
 
 def generate_patch_for_function_replacement(
@@ -317,7 +450,6 @@ def generate_patch_for_function_replacement(
     
     Args:
         original_file_content: Original file content as string
-        original_file_path: Path to the original file
         function_name: Name of the function to replace
         new_function_code: New function code as string
         context_lines: Number of context lines to include
