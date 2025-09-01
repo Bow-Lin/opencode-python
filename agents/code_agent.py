@@ -54,7 +54,7 @@ class CodeAgent(BaseAgent):
         diagnose_patterns = [r"\b(diagnose|lint|analy[sz]e|check)\b"]
         if any(re.search(p, query) for p in diagnose_patterns):
             return PlanResult(
-                plan="Run diagnostics on a file",
+                plan="Run diagnostics on a file with fix suggestions",
                 tools_to_use=["diagnose"],
                 parameters={"path": params.get("path", ".")},
             )
@@ -152,6 +152,19 @@ class CodeAgent(BaseAgent):
                     response = await self.ls_tool.execute(**plan_result.parameters)
                 elif tool_name == "diagnose":
                     response = await self.diagnose_tool.execute(**plan_result.parameters)
+                    tools_used.append(tool_name)
+                    
+                    # If diagnostics found issues, generate fix suggestions
+                    if response.success and self._has_diagnostics(response.content):
+                        fix_suggestions = await self._generate_fix_suggestions(
+                            response.content, 
+                            plan_result.parameters.get("path")
+                        )
+                        combined_result = f"{response.content}\n\n=== Fix Suggestions ===\n{fix_suggestions}"
+                        results.append(combined_result)
+                    else:
+                        results.append(response.content)
+                    continue
                 else:
                     continue
                 tools_used.append(tool_name)
@@ -187,3 +200,44 @@ class CodeAgent(BaseAgent):
         if match:
             return match.group(1)
         return None
+
+    def _has_diagnostics(self, diagnose_result: str) -> bool:
+        """Check if diagnostics result contains issues."""
+        return "Diagnostics:" in diagnose_result and "No diagnostics found" not in diagnose_result
+
+    async def _generate_fix_suggestions(self, diagnose_result: str, file_path: str) -> str:
+        """Generate fix suggestions based on diagnostic results."""
+        if not self.provider or not file_path:
+            return "Unable to generate fix suggestions: missing AI provider or file path"
+        
+        try:
+            # Read source file content
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+            
+            fix_prompt = f"""Based on the following code diagnostic results, please provide specific fix suggestions:
+
+Diagnostic Results:
+{diagnose_result}
+
+Source File Content:
+```
+{file_content}
+```
+
+Please provide:
+1. Problem analysis
+2. Specific fix steps
+3. Fixed code snippets (if applicable)
+
+Please answer in Chinese, but use English for code comments."""
+            
+            response = self.provider.generate(
+                user_query="",
+                prompt=fix_prompt,
+                temperature=0.3
+            )
+            
+            return response
+        except Exception as e:
+            return f"Error generating fix suggestions: {str(e)}"

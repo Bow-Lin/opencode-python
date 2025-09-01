@@ -29,7 +29,7 @@ class QwenProvider(BaseProvider):
         load_dotenv()
         default_config = {
             "api_key": os.getenv("DASHSCOPE_API_KEY"),
-            "model": "qwen-turbo",
+            "model": "qwen-plus",
             "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "timeout": 30,
         }
@@ -163,6 +163,7 @@ class QwenProvider(BaseProvider):
             "qwen-max-longcontext",
             "qwen-vl-plus",
             "qwen-vl-max",
+            "qwen3-32b",
         ]
 
     def get_model_info(self) -> Dict[str, Any]:
