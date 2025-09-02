@@ -216,12 +216,24 @@ class PatchTool(BaseTool):
         Args:
             original_code: Original code as string
             modified_code: Modified code as string
-            filename: Name of the file being modified
+            filename: Name of the file being modified (can be full path or relative path)
             context_lines: Number of context lines to include
             
         Returns:
             Unified diff format patch string
         """
+        # Convert absolute path to relative path for git patch format
+        if os.path.isabs(filename):
+            # Get current working directory
+            cwd = os.getcwd()
+            try:
+                # Convert to relative path
+                relative_filename = os.path.relpath(filename, cwd)
+                filename = relative_filename
+            except ValueError:
+                # If files are on different drives (Windows) or other issues, use basename
+                filename = os.path.basename(filename)
+        
         # Check if modified_code is a complete file or just a code snippet
         if len(modified_code.splitlines()) < len(original_code.splitlines()) * 0.8:
             # If modified_code is much shorter, treat it as a snippet and try to find where it fits
@@ -239,7 +251,7 @@ class PatchTool(BaseTool):
         Args:
             original_code: Original file content
             snippet_code: Code snippet to insert/replace
-            filename: Name of the file
+            filename: Name of the file (can be full path or relative path)
             context_lines: Number of context lines
             
         Returns:
@@ -263,11 +275,12 @@ class PatchTool(BaseTool):
                 start_line = best_match.a
                 end_line = start_line + best_match.size
                 
-                # Create the patch
+                # Create the patch - use the full filename path for proper patch application
                 patch_lines = []
-                base_filename = os.path.basename(filename)
-                patch_lines.append(f"--- a/{base_filename}")
-                patch_lines.append(f"+++ b/{base_filename}")
+                # Use the full filename path, not just basename
+                patch_lines.append(f"--- a/{filename}")
+                patch_lines.append(f"+++ b/{filename}")
+                
                 patch_lines.append(f"@@ -{start_line + 1},{end_line - start_line} +{start_line + 1},{len(snippet_lines)} @@")
                 
                 # Add context lines before
@@ -294,9 +307,10 @@ class PatchTool(BaseTool):
         
         # Fallback: simple replacement at the beginning
         patch_lines = []
-        base_filename = os.path.basename(filename)
-        patch_lines.append(f"--- a/{base_filename}")
-        patch_lines.append(f"+++ b/{base_filename}")
+        # Use the full filename path, not just basename
+        patch_lines.append(f"--- a/{filename}")
+        patch_lines.append(f"+++ b/{filename}")
+        
         patch_lines.append(f"@@ -1,{len(original_lines)} +1,{len(snippet_lines)} @@")
         
         # Remove all original lines
@@ -314,6 +328,7 @@ class PatchTool(BaseTool):
         original_file_content: str, 
         function_name: str, 
         new_function_code: str,
+        filename: str = "file.py",
         context_lines: int = 3
     ) -> str:
         """
@@ -323,6 +338,7 @@ class PatchTool(BaseTool):
             original_file_content: Original file content
             function_name: Name of the function to replace
             new_function_code: New function code
+            filename: Name of the file being modified (can be full path or relative path)
             context_lines: Number of context lines to include
             
         Returns:
@@ -332,6 +348,7 @@ class PatchTool(BaseTool):
             original_file_content,
             function_name,
             new_function_code,
+            filename,
             context_lines
         )
 
@@ -348,24 +365,20 @@ def generate_unified_diff(
     Args:
         original_lines: List of original code lines
         modified_lines: List of modified code lines
-        filename: Name of the file being modified
+        filename: Name of the file being modified (can be full path or relative path)
         context_lines: Number of context lines to include
         
     Returns:
         Unified diff format patch string
     """
     import difflib
-    import os
     
-    # Extract just the filename without full path for git patch format
-    base_filename = os.path.basename(filename)
-    
-    # Generate unified diff
+    # Generate unified diff - use the full filename path for proper patch application
     diff = difflib.unified_diff(
         original_lines,
         modified_lines,
-        fromfile=f"a/{base_filename}",
-        tofile=f"b/{base_filename}",
+        fromfile=f"a/{filename}",
+        tofile=f"b/{filename}",
         lineterm="",
         n=context_lines
     )
@@ -385,7 +398,7 @@ def generate_patch_from_code_blocks(
     Args:
         original_code: Original code as string
         modified_code: Modified code as string
-        filename: Name of the file being modified
+        filename: Name of the file being modified (can be full path or relative path)
         context_lines: Number of context lines to include
         
     Returns:
@@ -411,21 +424,20 @@ def _generate_manual_patch(
     Args:
         original_lines: List of original code lines
         modified_lines: List of modified code lines
-        filename: Name of the file being modified
+        filename: Name of the file being modified (can be full path or relative path)
         context_lines: Number of context lines to include
         
     Returns:
         Unified diff format patch string
     """
-    import os
-    
-    base_filename = os.path.basename(filename)
     
     # For now, use a simple approach: replace the entire file
     # This is more reliable than trying to find specific differences
     patch_lines = []
-    patch_lines.append(f"--- a/{base_filename}")
-    patch_lines.append(f"+++ b/{base_filename}")
+    # Use the full filename path, not just basename
+    patch_lines.append(f"--- a/{filename}")
+    patch_lines.append(f"+++ b/{filename}")
+    
     patch_lines.append(f"@@ -1,{len(original_lines)} +1,{len(modified_lines)} @@")
     
     # Remove all original lines
@@ -443,6 +455,7 @@ def generate_patch_for_function_replacement(
     original_file_content: str,
     function_name: str,
     new_function_code: str,
+    filename: str = "file.py",
     context_lines: int = 3
 ) -> str:
     """
@@ -452,6 +465,7 @@ def generate_patch_for_function_replacement(
         original_file_content: Original file content as string
         function_name: Name of the function to replace
         new_function_code: New function code as string
+        filename: Name of the file being modified (can be full path or relative path)
         context_lines: Number of context lines to include
         
     Returns:
@@ -474,8 +488,8 @@ def generate_patch_for_function_replacement(
     # Prepare new function code
     new_lines = new_function_code.splitlines(keepends=True)
     
-    # Generate patch
-    return generate_unified_diff(original_lines, new_lines, "file.py", context_lines)
+    # Generate patch with the actual filename
+    return generate_unified_diff(original_lines, new_lines, filename, context_lines)
 
 
 
